@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/banner.png" alt="Al Jazeera engineering banner: the words &quot;Clone. Spec. Ship.&quot; set beside a terminal window showing a spec-driven agent run in progress and a quality gate reporting a pass" width="900">
+
 # Agentic Backend Boilerplate
 
 **A .NET 10 API starting point that ships with its own engineering guardrails.**
@@ -26,7 +28,9 @@ commands, protect sensitive files, run the affected tests, scan for secrets, and
 the quality gate — plus slash commands for the recurring work.
 
 It contains **no business domain**. The one sample entity, `Item`, is designed to be deleted on
-your first day.
+your first day. The other module that ships — the "what's new" feature spotlight — is not a
+sample: it is a small piece of product plumbing most applications end up needing, and it is meant
+to be kept.
 
 ## Why it exists
 
@@ -46,11 +50,17 @@ without forking the codebase. Those decisions are made here, written down as
 - **OpenAPI as the published contract** — the document is generated from the controllers and
   the contract types, and consumers generate their clients from it. A missing
   `[ProducesResponseType]` is a bug. See [docs/api/](docs/api/).
-- **EF Core migration workflow** — MSSQL, migration-based, with exactly one `InitialCreate` in
-  the box so the workflow is demonstrated rather than described.
+- **EF Core migration workflow** — MSSQL, migration-based, with two migrations in the box
+  (`InitialCreate` and `AddFeatureAnnouncements`) so the workflow is demonstrated rather than
+  described.
+- **A "what's new" feature spotlight** — server-side announcements that surface to each user
+  exactly once, on the routes you bind them to, with the dismissal recorded per user so it
+  survives cleared browser storage and a second device. Two endpoints, two tables, no seeded
+  rows: each announcement ships as its own INSERT-only migration, and no service code changes to
+  add one. See [docs/whats-new.md](docs/whats-new.md).
 - **Real integration tests** — the suite starts its own SQL Server through Testcontainers,
   applies the migrations, and boots the real pipeline. There is no in-memory provider anywhere,
-  on purpose.
+  on purpose. 245 tests ship green: 185 unit, 9 architecture, 51 integration.
 - **Optimistic concurrency, outbox and inbox** — `rowversion` on every audited entity, and the
   messaging tables wired end to end rather than left as a TODO.
 - **Two clouds, one switch** — `CLOUD_PROVIDER=gcp|azure` selects the secrets provider and the
@@ -96,7 +106,7 @@ export APP_DB_CONNECTION="$ConnectionStrings__Default"   # what the design-time 
 docker network create app-net      # once per host
 docker compose up -d db redis
 
-# 4 — database. Apply the single InitialCreate migration.
+# 4 — database. Apply both migrations: InitialCreate and AddFeatureAnnouncements.
 dotnet tool install --global dotnet-ef
 dotnet ef database update \
   --project        src/AjBoilerplate.Infrastructure \
@@ -108,7 +118,9 @@ dotnet run --project src/AjBoilerplate.Api
 
 Open <http://localhost:5080/swagger> and exercise **Items** — create, read, update, and delete a
 row. That round trip runs the real middleware order, the envelope filter, the controller, the
-use-case service, the repository, and the migration you just applied. (Endpoints are
+use-case service, the repository, and the migration you just applied. **Features** is there too;
+it answers an empty array until you ship your first announcement, because the migration seeds no
+rows. (Endpoints are
 `[Authorize]`d, so you will get a `401` until you point the API at your identity provider and
 Keycloak realm — which is the correct answer, not a broken one.)
 
@@ -146,6 +158,7 @@ Full command reference: [CLAUDE.md](CLAUDE.md).
 │   ├── api/               how the OpenAPI contract is produced and consumed
 │   ├── handoff/           session handoffs written by the Stop hook
 │   ├── architecture.md    every layer, and why each boundary exists
+│   ├── whats-new.md       the feature-spotlight module, end to end
 │   ├── onboarding.md      Day-1 checklist
 │   ├── workflow.md        Spec → Plan → Execute → Verify → Review, with diagrams
 │   └── definition-of-done.md

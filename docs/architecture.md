@@ -3,8 +3,14 @@
 A layer-by-layer tour of the repository, written for someone who cloned it ten minutes ago.
 
 Every layer below is described the same way: **what it is for**, **what may live there**, **what
-may not**, **what it depends on**, **a concrete example from the sample `Item` slice with real
-file paths**, and **the mistake newcomers actually make** with it.
+may not**, **what it depends on**, **a concrete example with real file paths**, and **the mistake
+newcomers actually make** with it.
+
+Two modules ship, and each layer is illustrated with both. `Item` is the **sample slice** — it
+proves the path end to end and is meant to be deleted on day one. `Features` is the **"what's
+new" feature spotlight**, a real module that is meant to be kept; it shows the same layering
+carrying an actual behaviour rather than a demonstration. Its own end-to-end reference, including
+how to ship an announcement, is [whats-new.md](whats-new.md).
 
 The short version: dependencies point inward, the wire contract is a separate thing from the
 domain model, and both rules are enforced by tests rather than by good intentions.
@@ -138,7 +144,8 @@ regardless of how they are stored, transported, or displayed.
 - Enums describing a lifecycle
 - `DomainException`, for an invariant violation
 - Small pure helpers over domain values (`Common/PrivacyHash.cs` hashes an IP or user agent that
-  an audit row may correlate on but must never store raw)
+  an audit row may correlate on but must never store raw; `Features/FeaturePath.cs` canonicalises
+  a URL path before anything compares it)
 - Base types shared by every persisted root — `Common/AuditedEntity.cs` carries `CreatedAt`,
   `UpdatedAt`, and the `RowVersion` concurrency token
 
@@ -164,11 +171,38 @@ complete example of the house style, not a stub:
 - length limits as constants (`Item.MaxNameLength`, `Item.MaxDescriptionLength`) that the EF
   configuration and the request validators both read, so all three cannot drift
 
+**In the `Features` module.** Three files, and one of them is a security control:
+
+- `src/AjBoilerplate.Domain/Features/FeatureAnnouncement.cs` — the aggregate, in the same house
+  style: private constructor, a `Create` factory that trims and bounds every input against
+  `MaxKeyLength` / `MaxTitleLength` / `MaxBodyLength` / `MaxPagesJsonLength`, and mutation only
+  through `Retire` and `Reinstate`, both idempotent. It also answers the question the whole module
+  turns on — `Targets(requestPath)`, "do I apply to this route?"
+- `src/AjBoilerplate.Domain/Features/FeatureAcknowledgement.cs` — one user's dismissal of one
+  announcement. Its `MaxUserIdLength` is **128 characters, not a `Guid`**, because the user
+  identifier is `Actor.Id`: an opaque subject claim issued by an external identity provider, which
+  is not this schema's key to shape
+- `src/AjBoilerplate.Domain/Features/FeaturePath.cs` — canonicalises the path a caller claims to
+  be on. Page targeting is a prefix comparison, and comparing against an *unresolved* path is
+  exploitable: `/reports/../admin` literally starts with `/reports`, so an announcement scoped to
+  the reports area would fire on what every other consumer of that URL resolves to `/admin`.
+  `Normalize` drops the query string and fragment and resolves `.` and `..` on a stack before any
+  comparison happens, and `..` can never walk above the root
+
+Two deliberate degradations live here rather than in a service. An **empty page list matches every
+route**, and a `PagesJson` value that cannot be parsed degrades to exactly the same thing instead
+of throwing — this code runs on a lookup the client fires on every navigation, and one malformed
+row must not become a 500 for every user on every page. An announcement carries no authority, so
+showing one too widely is cosmetic; a broken targeting query is not.
+
 **The common mistake.** Reaching for a framework "just for this one thing" — a `[Required]`
 attribute, an `IQueryable`, a `DateTime.UtcNow`. The moment the Domain has a package reference, it
 stops being independently testable and every rule in it becomes hostage to a framework upgrade.
 The second most common mistake is a public setter: once `item.Status = ItemStatus.Archived` is
-legal from the outside, the invariant in `Update` is decoration.
+legal from the outside, the invariant in `Update` is decoration. The `Features` version of the
+same error is hoisting `FeaturePath.Normalize` out to the caller to "avoid normalising twice":
+`Targets` applies it itself so that no future caller can forget the guard, and normalisation is
+idempotent, so applying it twice costs nothing.
 
 ---
 
@@ -179,12 +213,17 @@ does not know how anything is stored or transported.
 
 **May live here**
 
-- Use-case services and their interfaces — `Items/ItemService.cs` and `IItemService`
+- Use-case services and their interfaces — `Items/ItemService.cs` and `IItemService`,
+  `Features/FeatureAnnouncementService.cs` and `IFeatureAnnouncementService`
 - **Ports**: interfaces the outer layers implement. `Abstractions/` holds `IClock`,
   `ICurrentActor`, `ICorrelationContext`, `IEmailSender`, `ISecretsProvider`,
   `IOutboxRepository`, `IInboxRepository`, `IIntegrationEventPublisher`, `IEntityIdCodec`;
-  `Items/IItemRepository.cs` is the persistence port for the sample slice
-- Commands, queries, and the layer's own read models — `Items/ItemModels.cs`
+  `Items/IItemRepository.cs` and `Features/IFeatureAnnouncementRepository.cs` are the two
+  persistence ports
+- Commands, queries, and the layer's own read models — `Items/ItemModels.cs`,
+  `Features/FeatureModels.cs`
+- Well-known identity values both the Api's claims reader and the use cases must agree on —
+  `Identity/ActorIdentifiers.cs`
 - FluentValidation validators, declared **on the command**, not on the wire DTO
 - Application-level exceptions that describe an outcome rather than a transport:
   `Common/ApplicationExceptions.cs` defines the abstract `ConflictException` and `ForbiddenException`
@@ -223,6 +262,29 @@ of the use case is validated — including one that never arrived over HTTP. It 
 worth copying: a missing or malformed `RowVersion` is a 400 (a client bug), never a 409, because a
 409 would tell the user someone else had edited the record when nobody had.
 
+**In the `Features` module.** `src/AjBoilerplate.Application/Features/FeatureAnnouncementService.cs`
+holds both use cases, and each one makes a decision worth reading before you copy the pattern:
+
+- `GetUnacknowledgedAsync` runs **two narrow reads instead of a join** — the active set is tiny and
+  already ordered by its index, and the second query seeks the same `(UserId, FeatureId)` unique
+  index that guarantees one acknowledgement per user. Page-list matching then happens **in memory**,
+  because matching means parsing a JSON array and resolving the caller's path: work SQL Server would
+  do badly and could not index anyway
+- `AcknowledgeAsync` **computes idempotency itself** rather than catching a constraint violation. It
+  subtracts the ids this user has already acknowledged, so a double-click or a retried request
+  writes nothing and returns success — instead of raising a unique-constraint violation that would
+  have to be caught, classified by SQL error number, and translated back into the success it always
+  was. It also drops an id that names no existing announcement rather than inserting it, so a stale
+  id from a client cannot trip the foreign key and turn a dismissal into a 500
+- Both call `RequireAuthenticatedUser`, which refuses the `anonymous` and `system` identifiers from
+  `Identity/ActorIdentifiers.cs`. The endpoint policy already rejects an anonymous caller; this is
+  defence in depth for any other entry point, because attributing acknowledgement rows to a shared
+  pseudo-identity would mark an announcement dismissed for everyone who is not signed in
+
+`Features/FeatureValidators.cs` bounds the two requests — a path of at most 2048 characters, and at
+most 200 ids per dismissal. An **empty** id list is deliberately valid: dismissing nothing is a
+successful no-op, not a client error.
+
 **The common mistake.** Putting the business rule in the service instead of the entity. If
 `ItemService` had checked `if (item.Status == ItemStatus.Archived) throw`, the rule would apply only
 to that one code path. It lives in `Item.Update` so it applies to every caller forever. The second
@@ -239,7 +301,8 @@ boundary, and the OpenAPI document is generated from them.
 **May live here**
 
 - Request and response records — `Items/ItemContracts.cs` holds `ItemResponse`,
-  `CreateItemRequest`, `UpdateItemRequest`
+  `CreateItemRequest`, `UpdateItemRequest`; `Features/FeatureContracts.cs` holds
+  `FeatureAnnouncementResponse` and `AcknowledgeFeaturesRequest`
 - The envelope — `Common/ApiResponse.cs` (generic and non-generic) and `Common/PagedResponse.cs`
 - `Common/EnvelopeCodes.cs`: the stable `code` slugs a client branches on
 - XML documentation comments, which become the descriptions in the generated OpenAPI document.
@@ -258,6 +321,13 @@ boundary, and the OpenAPI document is generated from them.
 `ItemResponse.RowVersion` is a base64 `string`, while the Application layer's `ItemDto.RowVersion`
 is a `byte[]`; the controller converts between them. That is the pattern in miniature — the wire
 shape is chosen for clients, the internal shape for correctness, and one place maps between them.
+
+**In the `Features` module.** `src/AjBoilerplate.Contracts/Features/FeatureContracts.cs` is the
+same idea with a different payoff. `FeatureAnnouncementResponse` publishes only what a client needs
+to render and dismiss a popup — and notably **not** `PagesJson` or `IsActive`, which are targeting
+and lifecycle state that no client has any business seeing. `AcknowledgeFeaturesRequest.FeatureIds`
+is nullable on the wire and normalised to an empty list by the controller, so a body of `{}` is an
+accepted no-op rather than a null-reference deep in a use case.
 
 **The common mistake.** Returning the EF entity because it "has the same fields". It does not:
 it has navigation properties that serialise into loops or over-fetch, private setters that model
@@ -310,6 +380,35 @@ rows.
 re-labels Kind on the way in and out. New timestamps should prefer `DateTimeOffset`, which
 round-trips unambiguously — the sample `Item` does.
 
+**In the `Features` module.** This is where the module's **second set of tables** lives —
+`feat_Features` and `feat_Acknowledgements`, mapped by
+`Persistence/Configurations/FeatureAnnouncementConfiguration.cs` and
+`Persistence/Configurations/FeatureAcknowledgementConfiguration.cs`, and created by the
+`20260803100548_AddFeatureAnnouncements` migration alongside the `InitialCreate` one.
+
+Four indexes, each earning its place:
+
+| Index | Table | Why |
+|---|---|---|
+| `IX_feat_Features_Key` (unique) | `feat_Features` | The stable handle the next announcement migration writes against; unique, so a copy-pasted key fails the migration instead of silently shipping a duplicate |
+| `IX_feat_Features_Active_Order` | `feat_Features` | Covers the hot path exactly — filter on `IsActive`, order by `DisplayOrder`. This lookup runs on every navigation of every signed-in client |
+| `IX_feat_Acknowledgements_User_Feature` (unique) | `feat_Acknowledgements` | **A correctness constraint, not tuning.** It is what makes a dismissal permanent and un-duplicable when two requests race past the application's own idempotency check — and it is the index the "has this user seen it?" lookup seeks on |
+| `IX_feat_Acknowledgements_FeatureId` | `feat_Acknowledgements` | EF Core's index for the foreign key, which cascades |
+
+Two mapping decisions are worth copying. `UserId` is `nvarchar(128)` with **no foreign key**: users
+live in the identity provider, not in this schema, so there is nothing to point at. And deleting an
+announcement **cascades** to its acknowledgements, because they mean nothing without it and leaving
+them would either block the delete or strand orphan rows.
+
+`Persistence/FeatureAnnouncementRepository.cs` orders by `(DisplayOrder, CreatedAt, Id)`. The first
+two are the documented contract; `Id` breaks a remaining tie so two announcements created in the
+same tick with the same order still have a stable sequence rather than whatever the engine returns.
+
+**The migration creates the two tables and their indexes and nothing else — it seeds no
+announcement rows.** That is the design, not an omission: an empty announcements table is the
+correct state for a fresh clone, and each real announcement ships later as its own INSERT-only
+migration with no service or schema change. [whats-new.md](whats-new.md) has that workflow.
+
 **The common mistake.** Letting a query decide policy. "The repository filters out archived items"
 sounds harmless until a second caller needs them and the rule is invisible from the use case. Ports
 return data; use cases decide. The other recurring mistake is `EnsureCreated()` — the schema here
@@ -325,7 +424,7 @@ cross-cutting middleware.
 
 **May live here**
 
-- Thin controllers — `Controllers/ItemsController.cs`
+- Thin controllers — `Controllers/ItemsController.cs`, `Controllers/FeaturesController.cs`
 - The composition root, `Program.cs`
 - Cross-cutting middleware and filters under `Infrastructure/`: the exception handlers, the
   envelope result filter, the status-code pages, security headers, rate limiting, CORS,
@@ -343,8 +442,8 @@ cross-cutting middleware.
 
 **Depends on.** `Application`, `Infrastructure`, `Contracts` — and deliberately **not** `Domain`.
 
-**In the sample slice.** `src/AjBoilerplate.Api/Controllers/ItemsController.cs` is the
-only controller that ships. Everything about it is intentional:
+**In the sample slice.** `src/AjBoilerplate.Api/Controllers/ItemsController.cs` is one of the two
+controllers that ship. Everything about it is intentional:
 
 - `[Route("api/v1/items")]` — versioned from day one, as `Every_controller_route_is_versioned` requires
 - `[Authorize(Policy = Policies.ReadAccess)]` on the class, `[Authorize(Policy = Policies.WriteAccess)]`
@@ -357,6 +456,26 @@ only controller that ships. Everything about it is intentional:
   only as good as its annotations and a client generated from a happy-path-only document has no
   idea how the endpoint fails
 
+**In the `Features` module.** `src/AjBoilerplate.Api/Controllers/FeaturesController.cs` publishes
+the module's two endpoints, and its authorization is the interesting part:
+
+| Endpoint | Policy | Answers |
+|---|---|---|
+| `GET /api/v1/features/unack?path=…` | `Policies.ReadAccess` | `200` with this user's pending announcements for that path, ordered by `DisplayOrder` then `CreatedAt` — an empty array when there is nothing to show |
+| `POST /api/v1/features/ack` | `Policies.ReadAccess` | `204`, idempotent |
+
+Both sit at **read** level — the widest policy here, satisfied by every recognised role — and the
+dismissal endpoint deliberately does **not** require `Policies.WriteAccess`. It writes a row about
+the *caller*, not about a business record, and gating it behind a write privilege would leave a
+read-only user permanently unable to close a popup they can see. That is the kind of decision worth
+making explicitly rather than by reflex: "it writes, therefore it is `WriteAccess`" produces a
+defect here, not a control.
+
+The controller stays thin in the usual way — it maps `FeatureAnnouncementDto` to
+`FeatureAnnouncementResponse` and normalises a null `FeatureIds` to an empty list, and nothing else.
+The path is *not* sanitised here: canonicalisation belongs to the domain, where
+`FeatureAnnouncement.Targets` applies it and no caller can skip it.
+
 **The common mistake.** Doing work in the controller. The tell is a `try`/`catch` — if an action
 catches an exception to shape a response, it is duplicating the handler chain and will drift from
 it. The other classic is adding a `using AjBoilerplate.Domain...` to "just map the enum", which
@@ -368,8 +487,8 @@ breaks the build at the architecture test rather than at review, which is exactl
 
 | Project | What it proves | Needs |
 |---|---|---|
-| `AjBoilerplate.UnitTests` | Domain invariants, use-case branches, validators, mappers, the claims and role tables, the log sanitizer, the id codec | nothing |
-| `AjBoilerplate.IntegrationTests` | The real request path end to end against a real SQL Server | Docker |
+| `AjBoilerplate.UnitTests` | Domain invariants, use-case branches, validators, mappers, the claims and role tables, the log sanitizer, the id codec — including path canonicalisation (`Features/FeaturePathTests.cs`), announcement targeting, and the acknowledgement idempotency rules | nothing |
+| `AjBoilerplate.IntegrationTests` | The real request path end to end against a real SQL Server — `Api/ItemsApiTests.cs`, `Api/FeaturesApiTests.cs`, the pipeline, and the concurrency and constraint behaviour | Docker |
 | `AjBoilerplate.ArchitectureTests` | The dependency rule and the controller conventions | nothing |
 
 The integration suite is worth understanding before you write your first test.
@@ -838,11 +957,24 @@ breaking-versus-additive test.
 `Item` exists to prove the path end to end. Every file in it says so. Deleting it is a day-one task,
 not a someday task.
 
-Remove `Items/` from each of the five source projects, `Controllers/ItemsController.cs`, the
-`InitialCreate` migration under `Persistence/Migrations/`, the `IItemService` and `IItemRepository`
-registrations in the two `DependencyInjection.cs` files, and the item tests. Keep the architecture
-tests — `ControllerConventionTests` asserts that at least one controller exists, so it will tell you
-if you have deleted the last one and left the conventions untested.
+Remove `Items/` from `Domain`, `Application`, and `Contracts`;
+`Persistence/ItemRepository.cs` and `Persistence/Configurations/ItemConfiguration.cs` from
+`Infrastructure`; `Controllers/ItemsController.cs` from `Api`; the `IItemService` and
+`IItemRepository` registrations in the two `DependencyInjection.cs` files; and the item tests. Keep
+the architecture tests — `ControllerConventionTests` asserts that at least one controller exists, so
+it will tell you if you have deleted the last one and left the conventions untested.
+
+For the schema, **do not simply delete the `InitialCreate` migration**: `AddFeatureAnnouncements`
+builds on it, so removing it alone breaks the chain. Either add a new migration that drops the
+`Items` table, or — if nothing is deployed anywhere yet — delete both migrations and regenerate a
+single baseline, which will contain the outbox, inbox, and `feat_*` tables and no `Items`.
+
+**The `Features` module is not part of the sample slice.** It shares nothing with `Item` except the
+two `DependencyInjection.cs` files, so deleting `Item` leaves it working. Delete it only if you
+genuinely do not want the "what's new" popup — in which case it goes the same way: `Features/` from
+`Domain`, `Application`, and `Contracts`, the repository and both configurations from
+`Infrastructure`, `Controllers/FeaturesController.cs`, its registrations, its tests, and a migration
+dropping `feat_Acknowledgements` and `feat_Features`.
 
 Then run the gate:
 
@@ -864,5 +996,6 @@ If the architecture tests still pass and the solution still builds, the slice is
 | Day-1 checklist | [onboarding.md](onboarding.md) |
 | Why each decision was made | [adr/](adr/) |
 | The API contract workflow | [api/README.md](api/README.md) |
+| The `Features` module, end to end | [whats-new.md](whats-new.md) |
 | Conventions and commands | [../CLAUDE.md](../CLAUDE.md) |
 | The harness itself | [../.claude/README.md](../.claude/README.md) |

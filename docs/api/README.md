@@ -45,6 +45,41 @@ The conventions behind all of this are in
 
 ---
 
+## What is published today
+
+Two controllers, and everything below is generated from them. Every response is wrapped in the
+`ApiResponse<T>` envelope described in
+[ADR-0005](../adr/0005-apiresponse-envelope-and-status-code-contract.md).
+
+| Method | Route | Policy | Success |
+|---|---|---|---|
+| `GET` | `/api/v1/items` | `ReadAccess` | `200` `PagedResponse<ItemResponse>` |
+| `GET` | `/api/v1/items/{id}` | `ReadAccess` | `200` `ItemResponse` |
+| `POST` | `/api/v1/items` | `WriteAccess` | `201` + `Location` |
+| `PUT` | `/api/v1/items/{id}` | `WriteAccess` | `200` `ItemResponse` |
+| `DELETE` | `/api/v1/items/{id}` | `WriteAccess` | `204` |
+| `GET` | `/api/v1/features/unack?path=…` | `ReadAccess` | `200` `FeatureAnnouncementResponse[]` |
+| `POST` | `/api/v1/features/ack` | `ReadAccess` | `204` |
+
+`items` is the sample slice and is expected to disappear from this table on your first day.
+`features` is the ["what's new" module](../whats-new.md) and is expected to stay, so its two
+endpoints are part of the contract a consumer may rely on. Three properties of them are contract,
+not implementation detail, and changing any one of them breaks clients:
+
+- **`GET unack` returns an array ordered by `DisplayOrder`, then `CreatedAt`.** A client renders
+  them in the order it receives them and does not re-sort.
+- **`POST ack` is idempotent and answers `204` with no body.** Acknowledging the same id twice, or
+  acknowledging an id that names no announcement, is a success — so a client may retry a failed
+  dismissal without special handling, and never has to interpret a `409`.
+- **Both require only `ReadAccess`.** Dismissing a popup is not a write privilege. A consumer
+  integrating against a read-only role can rely on being able to clear it.
+
+The response deliberately omits the announcement's targeting and lifecycle state (`PagesJson`,
+`IsActive`): the server decides what applies to a route, and publishing those fields would invite a
+client to re-implement that decision.
+
+---
+
 ## How consumers use it
 
 Consumers **generate** their client from this document; they do not hand-write types that mirror

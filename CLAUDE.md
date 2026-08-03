@@ -17,8 +17,15 @@ A runnable starting point for a new backend service: a .NET 10 layered Clean Arc
 an OpenAPI contract consumers generate their clients from, a quality gate, IaC for two cloud
 providers, and a committed `.claude/` harness.
 
-It contains **no business domain**. The single sample entity, `Item`, exists to prove the whole
-path end to end and is designed to be deleted on day one.
+It contains **no business domain**. Two modules ship, and they are not the same kind of thing:
+
+- **`Item`** — the sample slice. It exists to prove the whole path end to end and is designed to
+  be deleted on day one.
+- **`Features`** — the "what's new" feature spotlight. Real, keepable plumbing: it surfaces an
+  announcement to each user once, on the routes it is bound to, and records the dismissal per
+  user server-side. Two endpoints under `/api/v1/features`, two tables, **no seeded rows** — each
+  announcement ships as its own INSERT-only migration. Full reference:
+  [docs/whats-new.md](docs/whats-new.md).
 
 The frontend counterpart is [`aj-boilerplate-fe`](https://github.com/Emadkhanqai/aj-boilerplate-fe);
 both stacks together are [`aj-boilerplate-fs`](https://github.com/Emadkhanqai/aj-boilerplate-fs).
@@ -35,10 +42,11 @@ See [ADR-0006](docs/adr/0006-three-repository-split.md).
    `src/AjBoilerplate.Application/Items/`, `src/AjBoilerplate.Contracts/Items/`,
    `src/AjBoilerplate.Infrastructure/Persistence/ItemRepository.cs` and
    `src/AjBoilerplate.Infrastructure/Persistence/Configurations/ItemConfiguration.cs`,
-   `src/AjBoilerplate.Api/Controllers/ItemsController.cs`, the `InitialCreate` migration, and
-   the two `DependencyInjection.cs` registrations. Delete its tests with it; **keep the architecture
-   tests** — `ControllerConventionTests` asserts at least one controller exists, so it will tell
-   you if you deleted the last one.
+   `src/AjBoilerplate.Api/Controllers/ItemsController.cs`, its `DependencyInjection.cs`
+   registrations, and the `Items` table — as a new migration, or by deleting both existing
+   migrations and regenerating one baseline if nothing is deployed yet. Delete its tests with it;
+   **keep the architecture tests**. Leave the `Features` module alone: it shares nothing with
+   `Item` except those two `DependencyInjection.cs` files.
 4. **SonarQube project key** — set `SONAR_PROJECT_KEY`, or add `sonar-project.properties`.
 5. **Docs** — replace `README.md` and start your own ADR series (keep ours as `0001`–`0006`
    history, or delete them and start at `0001`).
@@ -197,7 +205,7 @@ controller — exceptions map to codes in the `IExceptionHandler` chain
 |---|---|---|
 | `200` | — | read, or an update that returns a body |
 | `201` | — | created, with a `Location` header |
-| `204` | — | delete |
+| `204` | — | delete, or an accepted command with nothing to return (`POST features/ack`) |
 | `400` | `VALIDATION_ERROR` | FluentValidation failure; `errors[]` lists the field failures |
 | `401` | `UNAUTHORIZED` | no or invalid token |
 | `403` | `FORBIDDEN` | policy failure, or `ForbiddenException` after the record is loaded |
@@ -271,6 +279,7 @@ integration tests for anything crossing a boundary.
 | Model routing (enforced every prompt) | `.claude/model-routing.md` |
 | The SonarQube gate, Community Build setup | `.claude/standards/sonarqube.md` |
 | Every layer, and why each boundary exists | [docs/architecture.md](docs/architecture.md) |
+| The "what's new" module, and how to ship an announcement | [docs/whats-new.md](docs/whats-new.md) |
 | Five-stage workflow and guardrails | [docs/workflow.md](docs/workflow.md) |
 | Definition of Done | [docs/definition-of-done.md](docs/definition-of-done.md) |
 | Day-1 checklist | [docs/onboarding.md](docs/onboarding.md) |

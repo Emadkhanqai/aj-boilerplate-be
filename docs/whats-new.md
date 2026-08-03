@@ -5,7 +5,12 @@ time they land on a page the announcement is bound to.
 
 The backend owns the decision — which announcements are live, which routes they apply to, and who
 has already dismissed which — so a client only has to ask "anything to show here?" and report back
-"they closed it".
+"they closed it". This repository publishes that contract; the popup itself belongs to whichever
+client consumes it and is not built here.
+
+Where this module sits in the layering is covered in
+[architecture.md](architecture.md); its place in the published contract is in
+[api/README.md](api/README.md). This page is the end-to-end reference.
 
 **Contents**
 
@@ -42,6 +47,11 @@ each dismissal is a real row.
 Both endpoints require a signed-in caller and nothing more — `Policies.ReadAccess`, this project's
 widest policy, satisfied by every recognised role.
 
+The dismissal endpoint is at read level **on purpose**, and it is the one authorization decision
+here worth defending. It writes a row about the *caller*, not about a business record; putting it
+behind `Policies.WriteAccess` because "it writes" would leave a read-only user looking at a popup
+they are permanently unable to close.
+
 ### `GET /api/v1/features/unack?path=/reports/monthly`
 
 Announcements to show, ordered by `DisplayOrder` then `CreatedAt`. An empty array means "nothing to
@@ -69,6 +79,13 @@ show" — the normal answer.
 
 `path` is treated as a path and nothing else: any query string or fragment is discarded, and `.` /
 `..` segments are resolved, **before** it is compared against a page list. Omitting it means `/`.
+It may be at most **2048 characters** — comfortably above the longest URL any mainstream browser
+issues — and a longer one is a `400` `VALIDATION_ERROR`. An unauthenticated caller gets `401`.
+
+The order is the contract: `DisplayOrder`, then `CreatedAt`. (The query adds `Id` as a final
+tiebreak so two announcements created in the same tick with the same order still come back in a
+stable sequence, but a client should not depend on which of the two is first — it should depend on
+not being reshuffled between calls.)
 
 ### `POST /api/v1/features/ack`
 
@@ -77,15 +94,28 @@ show" — the normal answer.
 ```
 
 Answers **204 No Content** with no body. Idempotent: ids this user already acknowledged are skipped,
-and an id naming no announcement is ignored rather than failing the batch. An empty array is an
-accepted no-op. Send every id that was shown in one request, not one request per id.
+and an id naming no announcement is dropped rather than inserted — so a stale id cannot trip the
+foreign key and turn a dismissal into a `500`. An empty array, and a body with no `featureIds` at
+all, are both accepted no-ops. Send every id that was shown in one request, not one request per id.
+
+At most **200 ids** per request; more is a `400` `VALIDATION_ERROR`, as is an empty `Guid` among
+them. A client only ever sends back what a single lookup handed it — a handful — so the bound
+constrains a hostile request and never a real one.
+
+Call it on **every** close path: the confirm button, the close icon, and Escape. An announcement
+that was shown but never acknowledged will be shown again on the next navigation, which is correct
+behaviour and looks like a bug.
 
 ---
 
 ## Data model
 
-Two tables. Neither is written by an API endpoint except `feat_Acknowledgements`, one row at a time,
-on behalf of the caller.
+Two tables. `feat_Features` is never written by an API endpoint at all — it is content, and it
+arrives by migration. `feat_Acknowledgements` is the only table the API writes to, one row per
+(user, announcement) the caller dismisses, inserted as a single batch per request.
+
+Both are created by the `20260803100548_AddFeatureAnnouncements` migration, which creates the two
+tables and their four indexes **and nothing else**. It seeds no announcements.
 
 ### `feat_Features` — one row per announcement
 
@@ -133,7 +163,15 @@ non-unique index on `FeatureId` for the cascade.
 | Contracts | `Features/FeatureContracts.cs` | The wire DTOs. |
 | Infrastructure | `Persistence/FeatureAnnouncementRepository.cs` | EF Core implementation. |
 | Infrastructure | `Persistence/Configurations/Feature*Configuration.cs` | MSSQL mapping and indexes. |
+| Infrastructure | `Persistence/Migrations/20260803100548_AddFeatureAnnouncements.cs` | The two tables and their indexes. No seed data. |
 | Api | `Controllers/FeaturesController.cs` | Routing, authorization, DTO mapping. |
+
+Tests, if you are changing any of it:
+
+| Project | File |
+|---|---|
+| Unit | `Features/FeaturePathTests.cs` · `Features/FeatureAnnouncementTests.cs` · `Features/FeatureAnnouncementServiceTests.cs` |
+| Integration | `Api/FeaturesApiTests.cs` — the real pipeline against a containerised SQL Server |
 
 The Application layer returns its own `FeatureAnnouncementDto`; the Api maps it to
 `FeatureAnnouncementResponse`. That is not ceremony — the architecture tests forbid Application from
