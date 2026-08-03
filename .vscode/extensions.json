@@ -1,0 +1,54 @@
+// Extension recommendations. VS Code offers these once, on first open, and lists them under
+// "Recommended" in the Extensions view. They are a suggestion, not a requirement — nothing in
+// this repository depends on an editor, and every gate runs from the command line and in CI.
+//
+// The list is deliberately short. A recommendation file with forty entries is one nobody reads,
+// and every extension is a process, a startup cost, and an update to keep track of. Everything
+// here either enforces a rule this repository already has (.editorconfig, SonarQube) or makes an
+// existing workflow visible in the editor (tests, migrations, containers, workflow YAML).
+//
+// JSONC: comments are legal in this file. VS Code parses it as JSON with comments.
+{
+  "recommendations": [
+    // --- Backend (.NET 10) ---------------------------------------------------
+    // C# Dev Kit brings the solution explorer, the test explorer, and project management.
+    // It depends on and installs `ms-dotnettools.csharp` (the language service) automatically;
+    // that one is listed anyway because the Dev Kit licence is not appropriate for every
+    // organisation, and the base C# extension is the part you actually cannot work without.
+    "ms-dotnettools.csdevkit",
+    "ms-dotnettools.csharp",
+
+    // --- Formatting ----------------------------------------------------------
+    // Applies `.editorconfig` to every file type, including the ones no formatter owns.
+    // Without it, `.editorconfig` is enforced only by `dotnet format` in CI, which means you
+    // find out about a violation on a pull request rather than on save.
+    "EditorConfig.EditorConfig",
+
+    // --- Quality gate --------------------------------------------------------
+    // SonarQube for IDE (formerly SonarLint). In connected mode it applies the SAME rules and
+    // the same quality profile as the server-side gate, so a Blocker shows up while you are
+    // typing rather than when `.claude/hooks/sonar-pre-push.sh` blocks your push. Connect it
+    // to the server named in `sonar-project.properties`.
+    "SonarSource.sonarlint-vscode",
+
+    // --- Infrastructure, containers, and CI ---------------------------------
+    // Terraform for `infra/gcp`: `terraform fmt` on save, validation, and provider docs.
+    "hashicorp.terraform",
+    // Bicep for `infra/azure`.
+    "ms-azuretools.vscode-bicep",
+    // Dockerfile and compose language support, plus container and image management. This is
+    // the one that makes `docker compose up` from the root of this repo inspectable.
+    "ms-azuretools.vscode-docker",
+    // Schema validation and completions for the workflow files in `.github/workflows/`.
+    // A typo in a workflow is otherwise found by pushing it.
+    "github.vscode-github-actions",
+    // YAML schema support for everything else: compose files, Dependabot, issue forms.
+    "redhat.vscode-yaml",
+
+    // --- Documentation -------------------------------------------------------
+    // The docs in this repository are part of the product (ADRs, specs, the Definition of
+    // Done) and are full of Mermaid diagrams, which this renders in the built-in preview.
+    "bierner.markdown-mermaid",
+    "DavidAnson.vscode-markdownlint"
+  ]
+}

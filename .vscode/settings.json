@@ -1,0 +1,87 @@
+// Workspace settings.
+//
+// DELIBERATELY MINIMAL. This file exists to make the editor agree with the configuration
+// this repository already has — `.editorconfig` and `.gitattributes` — not to add a
+// second, competing source of truth.
+//
+// The rule: if a setting duplicates something `.editorconfig` already says, it does not
+// belong here. Two files stating the same rule will disagree eventually, and the one that
+// wins will be whichever tool happens to run last. So there is no `editor.tabSize`, no
+// `editor.insertSpaces`, and no quote-style setting below — the EditorConfig extension and
+// the C# language service read those from the real config file.
+//
+// What IS here: which formatter owns which language, and which noise to keep out of search.
+//
+// Personal preferences (themes, font size, keybindings) belong in your user settings, not
+// in a committed workspace file. `.gitignore` tracks only `settings.json`, `tasks.json`,
+// `launch.json`, and `extensions.json` under `.vscode/`; everything else there is yours.
+{
+  // --- Formatting ----------------------------------------------------------
+  "editor.formatOnSave": true,
+
+  // C# is formatted by the C# extension, which reads the `[*.cs]` section of
+  // `.editorconfig` — the same rules `dotnet format --verify-no-changes` enforces in CI.
+  // Any other formatter here means the format gate fails on files you saved.
+  "[csharp]": { "editor.defaultFormatter": "ms-dotnettools.csharp" },
+
+  // Markdown: format on save is off. `.editorconfig` sets `trim_trailing_whitespace = false`
+  // for Markdown because two trailing spaces are a hard line break, and a formatter that
+  // does not know that silently rewrites the document.
+  "[markdown]": {
+    "editor.formatOnSave": false,
+    "editor.wordWrap": "on",
+    "editor.trimAutoWhitespace": false,
+    "files.trimTrailingWhitespace": false
+  },
+
+  // --- Line endings --------------------------------------------------------
+  // LF, matching `.editorconfig` and `.gitattributes`. `\n` here is what stops a Windows
+  // editor writing CRLF into a file that `dotnet format` will then reject in CI and that
+  // would break the shebang in `.claude/hooks/*.sh`. See the header of `.gitattributes`.
+  "files.eol": "\n",
+
+  // --- Language services ---------------------------------------------------
+  // Point the C# tooling at the solution explicitly. Auto-detection sometimes picks nothing
+  // and then reports no errors at all, which is indistinguishable from a clean build.
+  "dotnet.defaultSolution": "AjBoilerplate.slnx",
+
+  // --- Search and file watching -------------------------------------------
+  // Build output and test artefacts are not source. Excluding them keeps search results
+  // meaningful and keeps the file watcher off tens of thousands of files.
+  "search.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/coverage": true,
+    "**/TestResults": true
+  },
+  "files.watcherExclude": {
+    "**/bin/**": true,
+    "**/obj/**": true
+  },
+
+  // `bin` and `obj` are .NET build output and are already in `.gitignore`. Note that
+  // `files.exclude` hides them from Quick Open and search as well as from the explorer,
+  // which is the intent — but it is why the list is only these two. Do not add source
+  // directories here: a file you cannot Quick Open is a file you will assume is missing.
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true
+  },
+
+  // --- File associations ---------------------------------------------------
+  "files.associations": {
+    "*.slnx": "xml",
+    "*.props": "xml",
+    "*.targets": "xml",
+    // `ini` rather than `dotenv`: `ini` is built in, so this needs no extension to work.
+    ".env.example": "ini"
+  },
+
+  // --- YAML schemas --------------------------------------------------------
+  // Validates the files most likely to be wrong in a way that only CI would notice.
+  "yaml.schemas": {
+    "https://json.schemastore.org/github-workflow.json": ".github/workflows/*.yml",
+    "https://json.schemastore.org/dependabot-2.0.json": ".github/dependabot.yml",
+    "https://json.schemastore.org/github-issue-forms.json": ".github/ISSUE_TEMPLATE/*.yml"
+  }
+}
