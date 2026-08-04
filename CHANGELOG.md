@@ -70,7 +70,7 @@ Nothing yet.
 
 ---
 
-## [0.1.0] — 2026-08-03
+## [0.1.0] — 2026-08-04
 
 The initial extraction, published as three repositories. Everything below is the starting
 state rather than a change from something; subsequent entries will read as changes.
@@ -188,3 +188,18 @@ Stated here rather than discovered later:
 
 [Unreleased]: https://github.com/<your-org>/aj-boilerplate-be/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/<your-org>/aj-boilerplate-be/releases/tag/v0.1.0
+
+### Also in this first tag
+
+Fixes made between writing the entries above and cutting the tag.
+
+- **The migration bundle could not be built.** It left the compile to `dotnet ef`, which
+  reports only "Build failed. Use dotnet build to see the errors", so the CI log never named
+  a cause. The Release build is an explicit step now and the bundle runs `--no-build` against
+  verified output.
+- **The container scan could not start.** The Trivy action was pinned to `0.28.0`, which does
+  not exist as a tag, so the supply-chain workflow failed to resolve it on every run.
+- **`generate-openapi.sh` looked outside the repository.** It counted `../..` up from the
+  backend directory, which is correct in the full-stack tree and wrong here, where the
+  backend IS the root — so the contract gate reported a missing document rather than a wrong
+  path. It asks git for the root now.
