@@ -284,10 +284,15 @@ jobs:
       # migrations in this commit, with no SDK, no source tree, and no `dotnet ef` on the target.
       # Building it here proves it CAN be built on every run; deploy.yml is what runs it.
       #
-      # Release, and therefore NOT `--no-build`. Everything else in this job reuses the Debug
-      # build, but this is the one output that leaves CI and executes against a production
-      # database — shipping an unoptimised Debug binary there to save a compile is the wrong
-      # trade. Release output does not exist at this point, so it has to build its own.
+      # Release, not Debug. Everything else in this job reuses the Debug build, but this is the
+      # one output that leaves CI and executes against a production database — shipping an
+      # unoptimised Debug binary there to save a compile is the wrong trade.
+      #
+      # The Release build is a SEPARATE, EXPLICIT step rather than being left to `dotnet ef`.
+      # That is not tidiness: `dotnet ef` swallows compiler output and reports only
+      # "Build failed. Use dotnet build to see the errors.", so a failure here is undiagnosable
+      # from the CI log. Building first means the real error is printed by the real compiler,
+      # and the bundle step then runs with `--no-build` against output that is already verified.
       #
       # ZERO-DOWNTIME RULE — expand, migrate, contract. The bundle runs BEFORE the new code is live,
       # so this release's schema must still satisfy the release that is currently serving traffic.
@@ -297,10 +302,13 @@ jobs:
         shell: bash
         working-directory: .
         run: |
+          dotnet build "$SOLUTION" --configuration Release | tee "$GITHUB_WORKSPACE/migration-bundle-build.log"
+
           dotnet ef migrations bundle \
             --project         src/AjBoilerplate.Infrastructure \
             --startup-project src/AjBoilerplate.Api \
             --configuration   Release \
+            --no-build \
             --self-contained \
             --target-runtime  linux-x64 \
             --force \
@@ -343,9 +351,9 @@ jobs:
   # Gate 5b — the API contract.
   #
   # docs/api/openapi.json is COMMITTED, and this regenerates it from the built
-  # API and fails if the two differ. That is the whole point: a client generates
-  # its types from that file, so it is the contract, and a contract that can
-  # change without anyone noticing is not one.
+  # API and fails if the two differ. That is the whole point: the frontend
+  # generates its TypeScript types from that file, so it is the contract, and a
+  # contract that can change without anyone noticing is not one.
   #
   # Before this gate the guarantee was unbacked — the document was produced on
   # demand from a running API, so an endpoint could be renamed, a field dropped,
@@ -476,8 +484,8 @@ jobs:
         run: |
           # Analysis settings come from SonarQube.Analysis.xml via /s: so that this job and
           # .claude/hooks/sonar-pre-push.sh analyse identically. Note the SonarScanner for .NET
-          # does NOT read sonar-project.properties — that file carries the project identity for
-          # the CLI scanner and the IDE, which is why the analysis settings have to be XML.
+          # does NOT read sonar-project.properties — that file configures the CLI scanner only,
+          # which is why the backend needs XML while the frontend uses properties.
           #
           # Only the connection and the key stay here: the first two are secrets, and the key is
           # kept out of the file so one clone of this boilerplate cannot report into another
