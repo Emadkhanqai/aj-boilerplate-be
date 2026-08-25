@@ -50,10 +50,9 @@ without forking the codebase. Those decisions are made here, written down as
 - **OpenAPI as the published contract** — the document is generated from the controllers and
   the contract types, and consumers generate their clients from it. A missing
   `[ProducesResponseType]` is a bug. See [docs/api/](docs/api/).
-- **EF Core migration workflow** — MSSQL, migration-based, with two migrations in the box
+- **EF Core migration workflow** — MSSQL, migration-based, with three migrations in the box
   (`InitialCreate`, `AddFeatureAnnouncements`, and `AddIdempotencyRecords`) so the workflow is
-  demonstrated rather than
-  described.
+  demonstrated rather than described.
 - **A "what's new" feature spotlight** — server-side announcements that surface to each user
   exactly once, on the routes you bind them to, with the dismissal recorded per user so it
   survives cleared browser storage and a second device. Two endpoints, two tables, no seeded

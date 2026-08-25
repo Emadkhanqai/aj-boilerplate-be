@@ -60,7 +60,7 @@ export CLOUD_PROVIDER=gcp    # or azure — ask which one this project uses
 export ConnectionStrings__Default='Server=localhost,1433;Database=AjBoilerplate;User Id=sa;Password=<your-local-password>;TrustServerCertificate=True;'
 export APP_DB_CONNECTION="$ConnectionStrings__Default"   # what the design-time factory reads
 
-dotnet tool install --global dotnet-ef
+dotnet tool restore                 # dotnet-ef, pinned in .config/dotnet-tools.json
 dotnet ef database update \
   --project        src/AjBoilerplate.Infrastructure \
   --startup-project src/AjBoilerplate.Api
