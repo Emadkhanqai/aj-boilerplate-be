@@ -66,6 +66,18 @@ never derived to the single-stack repositories — those track releases only.
 
 ## [Unreleased]
 
+Nothing yet.
+
+---
+
+## [0.1.1] — 2026-09-01
+
+A patch release, and every entry in it is the same story: a tree that was green in August
+went red in September without anybody touching it. An advisory was published against a
+package nobody referenced directly, and one instruction in the upgrade guide went stale
+because the boilerplate grew. Nothing changes shape — but if you kept the sample
+integration fixture, there is a two-line change to make.
+
 ### Fixed
 
 - `docs/upgrading.md` told you to start your own ADR series at `0008`, and called the shipped
