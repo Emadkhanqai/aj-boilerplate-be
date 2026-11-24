@@ -17,8 +17,8 @@ shown to test anything.
 
 ## 2. All CI gates are green and SonarQube has passed
 
-Every job in `backend-ci.yml` green: restore, format verification, build with warnings as errors,
-unit tests, architecture tests, migration validation, integration tests, dependency vulnerability
+Every workflow green: build with warnings as errors, format verification, lint, unit tests,
+integration tests, architecture tests, E2E where a journey changed, dependency vulnerability
 scanning, secret scanning, and code scanning.
 
 The quality gate specifically: **zero new Blocker, Critical, or Major findings** and **≥80%
@@ -39,11 +39,9 @@ and must be able to explain any line of it.
 
 - A convention changed → `CLAUDE.md` changes in the same pull request.
 - A decision was made that is expensive to reverse → an ADR lands with the change.
-- An API contract changed → the annotations are complete, the published OpenAPI document reflects
-  it, and `docs/api/` says so. Consumers generate their clients from that document; a contract
-  change nobody announced is a broken client somewhere you cannot see.
-- A new error `code` was introduced → it is a constant in `EnvelopeCodes`, documented, and in the
-  OpenAPI document.
+- An API contract changed → the OpenAPI document is updated **and** the frontend types are
+  regenerated and committed.
+- A new error `code` was introduced → it is documented and in the OpenAPI document.
 
 If nothing changed, nothing to do. Stale documentation is worse than none, because people
 believe it.
@@ -51,8 +49,8 @@ believe it.
 ## 5. Deployed to staging and smoke-tested
 
 Merged is not deployed, and deployed is not working. The change is on staging, and someone has
-actually exercised the changed path there — the real endpoint against the real database, not a
-health check.
+actually exercised the changed path there — the real journey, in a browser or against the real
+API, not a health check.
 
 Note what was smoke-tested and what the result was.
 
@@ -75,7 +73,7 @@ Copy this into the pull request description.
 - [ ] 1. Every acceptance criterion met, with test output pasted below
 - [ ] 2. All CI gates green; quality gate passed (0 new Blocker/Critical/Major, ≥80% new-code coverage)
 - [ ] 3. `/review` findings resolved AND a human has approved
-- [ ] 4. CLAUDE.md / ADR / OpenAPI document updated, or confirmed unchanged
+- [ ] 4. CLAUDE.md / ADR / OpenAPI + generated types updated, or confirmed unchanged
 - [ ] 5. Deployed to staging and smoke-tested — what was tested: ________
 - [ ] 6. No open critical or major findings
 

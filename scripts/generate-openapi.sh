@@ -3,9 +3,9 @@
 # Regenerates the committed OpenAPI document at docs/api/openapi.json.
 #
 # The document is produced FROM THE COMPILED API, not written by hand, so it cannot describe an
-# endpoint that does not exist or a shape the server does not actually serialise. A client
-# generates its types from this file rather than reading the code, which is what makes it the
-# contract rather than a description of one.
+# endpoint that does not exist or a shape the server does not actually serialise. The frontend
+# generates its TypeScript types from this file, which is what makes it the contract rather than a
+# description of one.
 #
 #   ./scripts/generate-openapi.sh            # rewrite the snapshot
 #   ./scripts/generate-openapi.sh --check     # fail if the snapshot is out of date (what CI runs)
@@ -81,8 +81,8 @@ if [[ "${CHECK_ONLY}" == true ]]; then
 
 error: the API no longer matches the committed OpenAPI document.
 
-The diff above is a CONTRACT CHANGE. Clients generate their types from this file, so anything
-shown here changes what they compile against — including the removals, which break them.
+The diff above is a CONTRACT CHANGE. The frontend generates its types from this file, so anything
+shown here changes what clients compile against — including the removals, which break them.
 
 If the change is intended:
   1. ./scripts/generate-openapi.sh

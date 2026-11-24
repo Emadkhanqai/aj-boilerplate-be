@@ -27,7 +27,8 @@ default branch — so no step below names a branch or a pull request.
    dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
    ```
    Never add `sonar.branch.name` or `sonar.pullrequest.*` — those need Developer Edition or
-   above. See [`../standards/sonarqube.md`](../standards/sonarqube.md).
+   above. For the TypeScript half, use the plain `sonar-scanner` CLI with its own project key;
+   see [`../standards/sonarqube.md`](../standards/sonarqube.md).
 3. Read the results over the SonarQube MCP:
    - `get_project_quality_gate_status`
    - `search_sonar_issues_in_projects` filtered to `BLOCKER,CRITICAL,MAJOR`

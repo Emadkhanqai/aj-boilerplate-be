@@ -1,8 +1,8 @@
 # Local / QA stack: SQL Server + Redis + the API. Every credential comes from the environment —
 # copy `.env.example` to `.env` and fill it in. No password is ever committed here.
 #
-# Create the shared network once per host so another compose project on the same host can reach
-# `app-api` by container name: `docker network create app-net`.
+# Create the shared network once per host so a frontend compose project can reach `app-api` by
+# container name: `docker network create app-net`.
 services:
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -51,7 +51,7 @@ services:
       # the OS resolver and raw TCP both succeed.
       ConnectionStrings__Default: "Server=app-db;Database=AppDb;User Id=sa;Password=${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in .env};TrustServerCertificate=True;IPAddressPreference=IPv4First;"
       ConnectionStrings__Redis: "app-redis:6379"
-      # gcp | azure — selects the secrets provider and the authN issuer at the composition root.
+      # gcp | azure — selects the secrets provider at the composition root; it does not select an identity issuer.
       CLOUD_PROVIDER: ${CLOUD_PROVIDER:-gcp}
       # Enables Swagger UI (Program.cs gates UseSwagger()/UseSwaggerUI() behind IsDevelopment()).
       ASPNETCORE_ENVIRONMENT: Development

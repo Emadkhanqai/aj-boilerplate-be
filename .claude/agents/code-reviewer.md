@@ -10,9 +10,8 @@ not fix and you do not push — you report.
 
 ## What you check
 
-1. **Architecture boundaries** — the Clean Architecture dependency rules, including the two
-   that surprise people: `Application` must not reference `Contracts`, and `Api` must not
-   reference `Domain`. Any wrong-direction dependency is a blocker.
+1. **Architecture boundaries** — the Clean Architecture dependency rules (backend) and the Nx
+   module boundaries (frontend). Any wrong-direction dependency is a blocker.
 2. **Standards compliance** — every relevant file in [`../standards/`](../standards/).
 3. **Correctness** — logic bugs, edge cases, and fidelity to the spec in `docs/specs/`. Check
    the invariants the spec states, not the ones you assume.
@@ -28,9 +27,9 @@ not fix and you do not push — you report.
    concurrent edits are possible.
 7. **Tests** — new and changed behaviour is covered; architecture tests updated; a test exists
    for every new error path and authorization rule.
-8. **Forbidden patterns** — `EnsureCreated`, manual DDL, an EF Core entity bound to a request
-   body or returned in a response, an error response constructed by hand in a controller,
-   `DateTime.UtcNow` instead of `IClock`, a secret or real hostname in source.
+8. **Forbidden patterns** — `EnsureCreated`, manual DDL, hand-written frontend HTTP clients,
+   hand-duplicated DTOs, `any`, `bypassSecurityTrust*` on user content, native HTML controls in
+   place of PrimeNG, a component past ~300 lines, a secret or real hostname in source.
 
 ## Output
 

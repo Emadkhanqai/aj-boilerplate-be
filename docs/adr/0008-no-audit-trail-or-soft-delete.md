@@ -5,6 +5,12 @@
 **Deciders:** Boilerplate maintainers
 **Supersedes:** —
 
+> **Note, 2026-11-24.** The API now records one row per sign-in in an `AuthenticationEvents` table
+> (`SignInRecordingMiddleware`, see [ADR-0012](0012-gateway-session-auth.md)). That does not change
+> this decision. It is a **sign-in log**: who signed in and when the gateway session began. It records
+> no failed sign-ins, no session endings, no reads, and nothing about any business row, so there is
+> still no audit trail. The six tables listed under Context are now seven.
+
 ---
 
 ## Context
@@ -350,21 +356,21 @@ The decision is being honoured while all of the following hold.
 
 ## References
 
-- `src/AjBoilerplate.Domain/Common/AuditedEntity.cs` — record-level provenance, and the
+- `./src/AjBoilerplate.Domain/Common/AuditedEntity.cs` — record-level provenance, and the
   class this ADR most exists to disambiguate
-- `src/AjBoilerplate.Domain/Common/Actor.cs` ·
-  `src/AjBoilerplate.Application/Abstractions/ICurrentActor.cs` — the actor, already
+- `./src/AjBoilerplate.Domain/Common/Actor.cs` ·
+  `./src/AjBoilerplate.Application/Abstractions/ICurrentActor.cs` — the actor, already
   resolvable
-- `src/AjBoilerplate.Domain/Common/PrivacyHash.cs` ·
-  `src/AjBoilerplate.Application/Abstractions/ICorrelationContext.cs` — the two remaining
+- `./src/AjBoilerplate.Domain/Common/PrivacyHash.cs` ·
+  `./src/AjBoilerplate.Application/Abstractions/ICorrelationContext.cs` — the two remaining
   ingredients
-- `src/AjBoilerplate.Domain/Messaging/OutboxMessage.cs` ·
-  `src/AjBoilerplate.Application/Messaging/OutboxDispatcher.cs` — the recommended
+- `./src/AjBoilerplate.Domain/Messaging/OutboxMessage.cs` ·
+  `./src/AjBoilerplate.Application/Messaging/OutboxDispatcher.cs` — the recommended
   delivery seam, and its limits
-- `src/AjBoilerplate.Domain/Items/Item.cs` ·
-  `src/AjBoilerplate.Domain/Features/FeatureAnnouncement.cs` — domain-meaningful
+- `./src/AjBoilerplate.Domain/Items/Item.cs` ·
+  `./src/AjBoilerplate.Domain/Features/FeatureAnnouncement.cs` — domain-meaningful
   retirement, as opposed to soft delete
-- `src/AjBoilerplate.Infrastructure/Persistence/Configurations/FeatureAcknowledgementConfiguration.cs`
+- `./src/AjBoilerplate.Infrastructure/Persistence/Configurations/FeatureAcknowledgementConfiguration.cs`
   — the unique index and the cascade that soft delete would break
 - `.claude/standards/security.md` §Audit · `.claude/standards/middleware.md` §13 ·
   `.claude/standards/efcore-migrations.md` §Data lifecycle · `.claude/standards/ef-core.md` ·

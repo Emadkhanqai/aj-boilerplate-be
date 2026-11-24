@@ -38,7 +38,7 @@ Classify this task BEFORE any tool call or code edit, and name the cheapest tier
   FRONTIER (Opus-class) — architecture and design decisions, security review and threat
     modelling, complex multi-system debugging, high-blast-radius refactors, final pre-push
     review.
-  WORKHORSE (Sonnet-class) — implementation and CRUD, tests, database
+  WORKHORSE (Sonnet-class) — implementation and CRUD, tests, frontend and UI, database
     migrations, static-analysis fixes, docs and config, routine search.
 Then, in your first reply, before starting the work:
   1. State it: "Task: <type> — cheapest sufficient tier: <FRONTIER|WORKHORSE>."

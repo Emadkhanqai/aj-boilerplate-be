@@ -111,7 +111,7 @@ scan_file() {
   f="$1"
   [ -f "$f" ] || return 0
   case "$f" in
-    */bin/*|*/obj/*|*.lock) return 0 ;;
+    */node_modules/*|*/bin/*|*/obj/*|*/dist/*|*.lock|*package-lock.json|*.min.js) return 0 ;;
   esac
   # This file necessarily contains every pattern it looks for. Scanning it would
   # report a permanent, meaningless finding on every run.

@@ -1,6 +1,6 @@
 # Standard: Clean Architecture (.NET)
 
-**Applies to:** the `AjBoilerplate.*` solution at the repository root.
+**Applies to:** the `AjBoilerplate.*` backend solution under `./`.
 
 ## Layers & dependency rule
 
@@ -54,7 +54,7 @@ never "fixed" by relaxing the test.
 - **Infrastructure** — EF Core `DbContext`, the database provider, migrations, repository
   implementations, caching, messaging, external gateways, and other adapters.
 - **Contracts** — request/response **DTOs only**, plus the `ApiResponse<T>` envelope. Shared
-  with consumers via OpenAPI. No logic, no domain types, no EF types.
+  with the frontend via OpenAPI. No logic, no domain types, no EF types.
 - **Api** — thin controllers, DI wiring (composition root), middleware, auth, OpenAPI.
   Maps Contracts ↔ Application.
 
@@ -65,9 +65,8 @@ never "fixed" by relaxing the test.
 - Controllers are thin: validate input shape, dispatch to Application, map the result to a
   Contracts DTO, return. **No business logic in controllers.**
 - Domain never returns Contracts DTOs; mapping happens in Api/Application.
-- Feature folders live *inside* each layer (`src/AjBoilerplate.Application/Items/`,
-  `src/AjBoilerplate.Api/Controllers/`), so a feature is greppable without breaking the layer
-  rule.
+- Feature folders live *inside* each layer (`Application/Items/`, `Api/Controllers/Items/`),
+  so a feature is greppable without breaking the layer rule.
 
 ## Related
 

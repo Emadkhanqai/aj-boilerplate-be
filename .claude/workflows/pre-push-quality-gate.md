@@ -17,17 +17,24 @@ automatically — it is a gate, not a reminder.
 git status
 git diff --stat
 
-# 2. Build, format, test
+# 2. Backend
+cd .
 dotnet restore
 dotnet build --no-incremental          # zero errors; warnings are errors
 dotnet format --verify-no-changes      # style gate
 dotnet test                            # unit + integration + architecture
 dotnet list package --vulnerable --include-transitive
 
-# 3. Secrets
+# 3. Frontend
+cd ../frontend
+npx nx run-many -t lint typecheck test build
+npx nx e2e web-e2e                     # when a route or journey changed
+npm audit --audit-level=high
+
+# 4. Secrets
 gitleaks detect --no-banner --redact
 
-# 4. SonarQube
+# 5. SonarQube
 dotnet sonarscanner begin \
   /k:"$SONAR_PROJECT_KEY" \
   /d:sonar.host.url="$SONAR_HOST_URL" \
@@ -75,8 +82,8 @@ report rather than ignoring it.
 
 ## After the gate is green
 
-1. Produce a gate report: git status, build, format, tests, dependency audit, secret scan,
-   SonarQube status, remaining risks.
+1. Produce a gate report: git status, build, format, tests, frontend results, dependency
+   audit, secret scan, SonarQube status, remaining risks.
 2. Suggest a commit message.
 3. **Ask the user for explicit approval to push.** Approval is per-push and non-transferable —
    see [`../standards/git-approval-policy.md`](../standards/git-approval-policy.md).

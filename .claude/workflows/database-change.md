@@ -17,6 +17,7 @@ concurrently. See
 ## 2. Create the migration
 
 ```bash
+cd .
 dotnet ef migrations add <BusinessIntentName> \
   --project src/AjBoilerplate.Infrastructure \
   --startup-project src/AjBoilerplate.Api \

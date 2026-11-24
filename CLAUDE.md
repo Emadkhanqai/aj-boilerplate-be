@@ -1,7 +1,14 @@
 # CLAUDE.md — Agentic Backend Boilerplate
 
-Project context for Claude Code. Read this first, then whichever files in `.claude/standards/`
-cover what you are about to touch.
+Project context for Claude Code. Read this first, then [`README.be.md`](README.be.md) (the
+engineering reference: migrations, idempotency, feature flags, file storage) and whichever files in
+`.claude/standards/` cover what you are about to touch. For anything about sign-in, start at
+[`docs/auth/README.md`](docs/auth/README.md).
+
+> **This is `aj-boilerplate-be`, the backend half of a three-repository set** (ADR-0006), derived
+> from [`aj-boilerplate-fs`](https://github.com/Emadkhanqai/aj-boilerplate-fs). The Angular app and
+> the **nginx gateway** live in [`aj-boilerplate-fe`](https://github.com/Emadkhanqai/aj-boilerplate-fe).
+> Change the source in `fs` and re-derive; do not hand-edit shared files here.
 
 > **HARD RULE — secrets.** Never put a secret, password, API key, token, connection string,
 > certificate, or any credential in this file, in a prompt, in a commit message, in an ADR, in
@@ -13,45 +20,41 @@ cover what you are about to touch.
 
 ## What this is
 
-A runnable starting point for a new backend service: a .NET 10 layered Clean Architecture API,
-an OpenAPI contract consumers generate their clients from, a quality gate, IaC for two cloud
-providers, and a committed `.claude/` harness.
+A runnable starting point for a new backend service: a .NET layered Clean Architecture API, an
+OpenAPI contract consumers generate clients from, an Auth service (Entra ID sign-in, sessions,
+Keycloak token exchange, user admin through Keycloak's Admin REST API, a session-ended outbox to the API)
+that keeps tokens out of the browser, a quality gate, IaC for two cloud
+providers, and a committed `.claude/` harness. The gateway nginx that sits in front of both is in the
+frontend repository.
 
 It contains **no business domain**. Two modules ship, and they are not the same kind of thing:
 
-- **`Item`** — the sample slice. It exists to prove the whole path end to end and is designed to
-  be deleted on day one.
-- **`Features`** — the "what's new" feature spotlight. Real, keepable plumbing: it surfaces an
-  announcement to each user once, on the routes it is bound to, and records the dismissal per
-  user server-side. Two endpoints under `/api/v1/features`, two tables, **no seeded rows** — each
-  announcement ships as its own INSERT-only migration. Full reference:
-  [docs/whats-new.md](docs/whats-new.md).
-
-The frontend counterpart is [`aj-boilerplate-fe`](https://github.com/Emadkhanqai/aj-boilerplate-fe);
-both stacks together are [`aj-boilerplate-fs`](https://github.com/Emadkhanqai/aj-boilerplate-fs).
-See [ADR-0006](docs/adr/0006-three-repository-split.md).
+- **`Item`** — the sample slice. It exists to prove the whole path end to end and is designed
+  to be deleted on day one.
+- **`Features`** — the "What's new" feature spotlight: shows each user a newly shipped feature
+  once, the first time they hit a URL prefix bound to it, with acknowledgement stored per user
+  server-side. Domain-free, and meant to be kept. Adding an announcement is an INSERT-only
+  migration — no service change, no frontend change. Full reference: [docs/whats-new.md](docs/whats-new.md).
 
 ## Making it yours (do this first)
 
-1. **Namespaces and assemblies** — rename `AjBoilerplate` everywhere: the five project folders
-   under `src/`, the three under `tests/`, every `namespace` and `using`, and `RootNamespace` /
-   `AssemblyName` in the `.csproj` files if you set them explicitly.
-2. **Solution name** — rename `AjBoilerplate.slnx` at the repository root and update the eight
-   `<Project Path=…>` entries inside it to the new folder names.
-3. **Sample entity** — delete or rename `Item` end to end: `src/AjBoilerplate.Domain/Items/`,
-   `src/AjBoilerplate.Application/Items/`, `src/AjBoilerplate.Contracts/Items/`,
-   `src/AjBoilerplate.Infrastructure/Persistence/ItemRepository.cs` and
-   `src/AjBoilerplate.Infrastructure/Persistence/Configurations/ItemConfiguration.cs`,
-   `src/AjBoilerplate.Api/Controllers/ItemsController.cs`, its `DependencyInjection.cs`
-   registrations, and the `Items` table — as a new migration, or by deleting both existing
-   migrations and regenerating one baseline if nothing is deployed yet. Delete its tests with it;
-   **keep the architecture tests**. Leave the `Features` module alone: it shares nothing with
-   `Item` except those two `DependencyInjection.cs` files.
-4. **SonarQube project key** — set `SONAR_PROJECT_KEY`, or add `sonar-project.properties`.
-5. **Docs** — replace `README.md` and start your own ADR series (keep ours as `0001`–`0006`
-   history, or delete them and start at `0001`).
-6. **Infra** — pick your provider, set the project/subscription variables, configure a remote
-   state backend, and delete the tree you are not using.
+1. **.NET identity** — rename `AjBoilerplate` everywhere: the six project folders under `src/`
+   (including `AjBoilerplate.Auth`), the four under `tests/`, `AjBoilerplate.slnx`, every
+   `namespace`/`using`, `RootNamespace`/`AssemblyName` in the `.csproj` files, and the
+   `sonar.projectKey`.
+2. **Sample entity** — delete or rename `Item` end to end: domain entity, handlers, DTOs, EF
+   configuration, the `Items` table in the `InitialCreate` migration, controller and OpenAPI paths.
+   Delete its tests with it; keep the architecture tests. Leave the `Features` module and
+   `AddFeatureAnnouncements` alone — they carry no domain and are not part of the sample slice.
+3. **Auth** — pick `AUTH_PROVIDER`: `embedded` (you deploy the Auth service; every project outside
+   the Al Jazeera USP platform) or `usp` (inside USP; you do not deploy it). Replace the seats and
+   permissions with your model (`ApplicationRoles`, `Permissions`, the local realm, and the
+   frontend's role map in `aj-boilerplate-fe`). See [docs/auth/setup.md](docs/auth/setup.md).
+4. **Docs** — replace `README.md` and continue the ADR series at `0013` (keep ours as
+   `0001`–`0012` history or delete them).
+5. **Infra** — pick your provider, set project/subscription variables, configure a remote
+   state backend, and delete the tree you are not using. `infra/` provisions the API, database,
+   Redis and secrets; deploying the web container, Auth service and Keycloak is yours.
 
 ## Stack
 
@@ -60,10 +63,11 @@ See [ADR-0006](docs/adr/0006-three-repository-split.md).
 | API | .NET 10, ASP.NET Core, EF Core 10 |
 | Database | Microsoft SQL Server (migration-based, never `EnsureCreated`) |
 | Cache | Redis (Memorystore on GCP, Cache for Redis on Azure — protocol-identical) |
-| AuthN | Google Cloud Identity (`gcp`) or Microsoft Entra ID (`azure`) |
-| AuthZ | Keycloak — provider-independent, roles and policies live there |
-| Tests | xUnit; integration suite on a Testcontainers SQL Server |
-| Quality | SonarQube Community Build (free, self-hosted), Gitleaks, CodeQL, `dotnet format` |
+| AuthN | Microsoft Entra ID, through the Auth service (`AjBoilerplate.Auth`): server-side Authorization Code + PKCE. The same on both clouds. |
+| AuthZ | Keycloak — roles and permissions live there; the API validates the JWT it mints for this app's client |
+| Gateway | **Not in this repository.** nginx in the web container of `aj-boilerplate-fe` (`AUTH_PROVIDER=embedded`), or USP's shared gateway (`usp`) |
+| Tests | xUnit + Testcontainers-based integration suite |
+| Quality | SonarQube Community Build (free, self-hosted), Gitleaks, CodeQL, `dotnet format`, Prettier-free: `.editorconfig` |
 
 ## Architecture
 
@@ -72,171 +76,168 @@ See [ADR-0006](docs/adr/0006-three-repository-split.md).
 ├── AjBoilerplate.slnx
 ├── src/
 │   ├── AjBoilerplate.Domain/          entities, domain exceptions — zero dependencies
-│   ├── AjBoilerplate.Application/     use cases, ports (abstractions), validation
+│   ├── AjBoilerplate.Application/     handlers, ports (abstractions), validation
 │   ├── AjBoilerplate.Contracts/       DTOs, ApiResponse<T>, PagedResponse<T>
 │   ├── AjBoilerplate.Infrastructure/  EF Core, repositories, cache, secrets, messaging
-│   └── AjBoilerplate.Api/             controllers, middleware, DI, auth, observability
+│   ├── AjBoilerplate.Api/             controllers, middleware, DI, JWT validation (Identity/), observability
+│   └── AjBoilerplate.Auth/            SEPARATE host: sign-in, sessions, /auth/validate. References none of
+│                                      the five above, and none reference it
 └── tests/
     ├── AjBoilerplate.UnitTests/
     ├── AjBoilerplate.IntegrationTests/
-    └── AjBoilerplate.ArchitectureTests/   ← enforces the rule below, in CI
-```
+    ├── AjBoilerplate.Auth.Tests/          the Auth service (fakes, no Docker needed)
+    └── AjBoilerplate.ArchitectureTests/   ← enforces the rule below and the Auth service's independence
+Both shipped modules are foldered the same way at every layer — `Items/` next to `Features/` — so a
+third one has an obvious shape to copy.
 
 **The layer dependency rule.** Dependencies point inward, one direction only:
 
 ```
 Api → Infrastructure → Application → Domain
 Api → Contracts
+Auth → (none of the above)
 ```
 
 - `Domain` references nothing. No EF Core, no ASP.NET, no third-party framework.
-- `Application` may reference `Domain` — and **must NOT reference `Contracts`. The architecture
-  test `Application_does_not_depend_on_the_wire_contracts` enforces this.** The Application
-  layer owns its own models; `Api` maps them to the wire DTOs. Otherwise a breaking API change
-  would force a change to the use cases themselves. It declares ports (interfaces); it never
-  references `Infrastructure` or `Api`.
+- `Application` may reference `Domain` — and **not** `Contracts`. The Application layer owns its
+  own models; `Api` maps them to the wire DTOs. Otherwise a breaking API change would force a
+  change to the use cases themselves. It declares ports (interfaces); it never references
+  `Infrastructure` or `Api`.
 - `Contracts` references nothing else. It is the wire format, shared with API consumers.
 - `Infrastructure` implements those ports. It is the only project that knows about EF Core,
   Redis, HTTP clients, or a cloud SDK.
-- **`Api` must not reference `Domain`** — also asserted, by
-  `Api_does_not_reference_domain_directly`. It works through Application models and Contracts
-  DTOs, which is what keeps entities out of request and response bodies.
+- `Api` composes. Controllers are thin: validate, delegate to a handler, shape a response.
 - Business rules live in `Domain` and `Application`. Never in a controller, never in a
-  repository.
+  repository, never in a client.
 
-`AjBoilerplate.ArchitectureTests` inspects **compiled assembly references**, so a violation
-cannot be hidden behind a fully qualified name. If it fails, the fix is to move the type that
-leaked — never to relax the test.
-
-Full tour, with the reasoning for each boundary: [docs/architecture.md](docs/architecture.md).
+`AjBoilerplate.ArchitectureTests` fails the build if any of this is violated, including the Auth
+service referencing the API-side projects or being referenced by them. Do not weaken it.
 
 ## Commands
 
-Run from the repository root.
+Run from the repository root unless noted.
 
 ```bash
-dotnet restore
-dotnet build  -warnaserror                            # warnings are errors
-dotnet format --verify-no-changes                     # CI-equivalent style gate
-dotnet test                                           # all three suites; needs Docker
-dotnet test tests/AjBoilerplate.UnitTests             # fast, no dependencies
-dotnet test tests/AjBoilerplate.ArchitectureTests     # fast, no dependencies
-dotnet test tests/AjBoilerplate.IntegrationTests      # Testcontainers SQL Server
-dotnet run --project src/AjBoilerplate.Api            # http://localhost:5080, Swagger at /swagger
-dotnet list package --vulnerable --include-transitive
+dotnet restore  AjBoilerplate.slnx
+dotnet build    AjBoilerplate.slnx -warnaserror
+dotnet format   AjBoilerplate.slnx --verify-no-changes   # CI-equivalent check
+dotnet test     tests/AjBoilerplate.UnitTests
+dotnet test     tests/AjBoilerplate.ArchitectureTests
+dotnet test     tests/AjBoilerplate.IntegrationTests     # needs Docker (Testcontainers starts SQL Server)
+dotnet test     tests/AjBoilerplate.Auth.Tests           # the Auth service; no Docker needed
+dotnet run    --project src/AjBoilerplate.Api            # http://localhost:5080
+dotnet run    --project src/AjBoilerplate.Auth           # http://localhost:5090 (launchSettings; secrets via env)
+dotnet list     AjBoilerplate.slnx package --vulnerable --include-transitive
 ```
 
-`dotnet test` requires Docker. `SqlServerFixture` starts one throwaway SQL Server container,
-applies the migrations to it, and tears it down. There is no in-memory provider anywhere, on
-purpose: a suite that cannot see a unique index, a `rowversion`, or the SQL EF Core actually
-emits is not testing the integration.
-
-Local dependencies via Docker Compose:
-
-```bash
-cp .env.example .env          # then fill in MSSQL_SA_PASSWORD
-docker compose up -d db redis
-docker compose --profile tools run --rm migrate     # apply migrations
-```
+The API answers `401` to protected endpoints until `Keycloak__ValidIssuer`, `Keycloak__JwksUri` and
+`Keycloak__ClientId` point at a Keycloak. The sign-in flow end to end (Keycloak, Auth service,
+gateway, seeded users) runs from the root `docker-compose.yml` of `aj-boilerplate-fs`, not from here.
+The Auth service has its own migrations (schema `auth`, `AUTH_DB_CONNECTION` for the design-time
+factory); see `src/AjBoilerplate.Auth/README.md`.
 
 ### Migrations
 
 ```bash
-dotnet ef migrations add <IntentRevealingName> \
+dotnet ef migrations add <Name> \
   --project        src/AjBoilerplate.Infrastructure \
-  --startup-project src/AjBoilerplate.Api \
-  --output-dir     Persistence/Migrations
+  --startup-project src/AjBoilerplate.Api
 dotnet ef database update \
   --project        src/AjBoilerplate.Infrastructure \
   --startup-project src/AjBoilerplate.Api
 ```
 
 Prefer the `/new-migration` command — it reviews the generated SQL before anything is applied.
-The design-time factory reads `APP_DB_CONNECTION`, **not** `ConnectionStrings__Default` (which
-only the running app uses).
 
-### The gate
+### Whole-repo gate
 
-`/qa` runs the full local gate (build, format, tests, dependency audit, secret scan,
-SonarQube). `/pre-push` runs it and reports readiness. Neither pushes.
+`/qa` runs the full local gate (build, format, tests, SonarQube). `/pre-push` runs it and
+reports readiness. Neither pushes.
 
 ## The `CLOUD_PROVIDER` switch
 
 `CLOUD_PROVIDER` (env var, bound to `Cloud:Provider` in configuration) accepts `gcp` or
-`azure`. `CloudOptions.Resolve()` throws on anything else — a typo fails loudly at startup
-rather than silently reading secrets from the wrong cloud.
+`azure`. Set it before running the API. An unrecognised value fails at start-up.
 
 | Concern | `gcp` | `azure` |
 |---|---|---|
 | Secrets | Secret Manager | Key Vault + Managed Identity |
-| Identity (authN) | Google Cloud Identity | Microsoft Entra ID |
-| Authorization | Keycloak | Keycloak |
 | Cache | Memorystore | Cache for Redis |
-| Database | SQL Server | SQL Server |
 | IaC | `infra/gcp/` (Terraform) | `infra/azure/` (Bicep) |
 
-Only secrets and identity branch in code, behind `ISecretsProvider` and `AuthenticationSetup`.
-Everything else is provider-agnostic. If you add a third provider, add it in those two places —
-not scattered through feature code.
+Only **secrets** branch in code, behind `ISecretsProvider`. **Identity does not branch:** users
+sign in against Entra ID on either cloud, and the API validates only Keycloak JWTs
+([ADR-0012](docs/adr/0012-gateway-session-auth.md); ADR-0002's identity half is superseded).
+If you add a third provider, add it in that one place, not scattered through feature code.
+
+## Authentication — read before touching anything auth-shaped
+
+The model, in one line: **browser → nginx (cookie) → Auth service → Keycloak JWT → API.** Full
+picture and diagrams: [docs/auth/README.md](docs/auth/README.md). The wire contract all four parts
+share (nginx, Auth service, API, SPA) is [docs/auth/gateway-contract.md](docs/auth/gateway-contract.md);
+**change one part and you change all four in the same PR.** In this repository you own two of the
+four, the API and the Auth service; nginx and the SPA are in `aj-boilerplate-fe`, so a contract change
+here is a coordinated change there. Work on the contract itself in `aj-boilerplate-fs`.
+
+Two switches: `AUTH_PROVIDER=embedded|usp` (who runs the gateway) and `AUTH_MODE=gateway|dev` (`dev`
+is a role picker for UI work; it cannot call a gateway-mode API).
+
+**Auth non-negotiables** (these are the contract's invariants, restated):
+
+1. **The browser holds no token.** No `localStorage`/`sessionStorage` token, no `Authorization`
+   header from the SPA, no browser OIDC client. Only the Auth service sets or reads the session cookie.
+2. **Only three things end a session:** an Entra `invalid_grant` (or its siblings), a definitive
+   Keycloak "no role", and the 12 h absolute lifetime. **An infrastructure fault never signs anyone
+   out**: it serves the current JWT while it has more than 5 s left, otherwise answers 503.
+3. **Only a `401` may become a login redirect.** A 403 or 503 never does. `X-Usp-Access: revoked` is
+   sent only on a definitive verdict.
+4. **The API trusts Keycloak JWTs only**, checks `azp` equals `Keycloak:ClientId` (fails closed),
+   uses `ClockSkew = 0`, and refuses a plaintext JWKS outside Development unless
+   `Keycloak:AllowInsecureJwksTransport` is set on purpose. Every endpoint declares a policy; the
+   fallback policy denies.
+5. **Seat OR permission.** A policy is satisfied by the role hierarchy or by a `resource:action`
+   permission. A role key the app does not know is dropped, never granted. A role name may appear in
+   exactly the places `docs/auth/setup.md` section 4 lists.
+6. **Never log** `Authorization`, `X-Auth-Jwt`, cookies, tokens, client secrets or claim payloads.
+   Log reason slugs, status codes and route templates. Do not log a raw URL: it can carry an OAuth
+   `code`.
+7. **Secrets arrive as environment variables** from the secrets provider. The API loads the secret
+   store itself; the Auth service does not, so its platform injects them. Never in a file.
+8. **The Auth service stays independent** of `Api`, `Application`, `Domain`, `Infrastructure` and
+   `Contracts`.
 
 ## Conventions
 
 **API envelope.** Every response, success or failure, is `ApiResponse<T>`:
 `{ success, data, message, errors, statusCode, code, timestamp, traceId }`. Collections use
-`PagedResponse<T>`. `EnvelopeResultFilter` applies the envelope to controller results and
-`EnvelopeStatusCodePages` applies it to replies that never reach a controller; controllers
-return the payload.
+`PagedResponse<T>`. A result filter applies the envelope; controllers return the payload.
 
-**Error codes.** `code` is a stable `SCREAMING_SNAKE_CASE` slug a client may branch on;
-`message` is human-readable and may change. The complete set is
-`AjBoilerplate.Contracts.Common.EnvelopeCodes`:
+**Status codes.** `200` read, `201` created (with `Location`), `204` delete, `400` validation,
+`401` unauthenticated, `403` unauthorised, `404` missing, `409` conflict or concurrency,
+`422` domain-rule violation, `429` rate-limited, `500` unhandled. Never `200` with
+`success: false`.
 
-`VALIDATION_ERROR` · `CONFLICT` · `INTERNAL_ERROR` · `UNAUTHORIZED` · `FORBIDDEN` ·
-`NOT_FOUND` · `METHOD_NOT_ALLOWED` · `UNSUPPORTED_MEDIA_TYPE` · `REQUEST_FAILED` ·
-`SERVICE_UNAVAILABLE` · `TOO_MANY_REQUESTS`
-
-Add a constant there before you use a new one. Never construct an error response by hand in a
-controller — exceptions map to codes in the `IExceptionHandler` chain
-(Validation → Conflict → Forbidden → Unhandled).
-
-**Status codes.** What this API actually produces, and the `code` that comes with it:
-
-| Status | `code` | When |
-|---|---|---|
-| `200` | — | read, or an update that returns a body |
-| `201` | — | created, with a `Location` header |
-| `204` | — | delete, or an accepted command with nothing to return (`POST features/ack`) |
-| `400` | `VALIDATION_ERROR` | FluentValidation failure; `errors[]` lists the field failures |
-| `401` | `UNAUTHORIZED` | no or invalid token |
-| `403` | `FORBIDDEN` | policy failure, or `ForbiddenException` after the record is loaded |
-| `404` | `NOT_FOUND` | missing, or not visible to this caller |
-| `405` | `METHOD_NOT_ALLOWED` | wrong verb on a matched route |
-| `409` | `CONFLICT` | `ConflictException`, including optimistic-concurrency failure |
-| `415` | `UNSUPPORTED_MEDIA_TYPE` | wrong content type |
-| `429` | `TOO_MANY_REQUESTS` | rate limited |
-| `500` | `INTERNAL_ERROR` | unhandled — never leaks a stack trace or internal message |
-| `503` | `SERVICE_UNAVAILABLE` | a dependency is down |
-
-Never `200` with `success: false`.
+**Error codes.** `code` is a stable `SCREAMING_SNAKE_CASE` string clients may branch on
+(`ITEM_NOT_FOUND`, `VALIDATION_FAILED`, `CONCURRENCY_CONFLICT`). `message` is human-readable
+and may change; `code` may not. Exceptions map to codes in the `IExceptionHandler` chain —
+never construct an error response by hand in a controller.
 
 **Routing.** `/api/v{version}/{resource}` — plural, kebab-case, versioned from day one.
-`ControllerConventionTests` fails the build if a route is unversioned, or if a controller
-carries neither `[Authorize]` nor an explicit `[AllowAnonymous]`.
 
-**Migrations live in `src/AjBoilerplate.Infrastructure/Persistence/Migrations/`.** Every schema
-change is an EF Core migration, reviewed as SQL before it is applied. Never edit a migration
-that has been applied anywhere but your own machine; add a new one. Never `EnsureCreated`,
-never out-of-band DDL, never auto-apply on startup.
+**Migrations.** Every schema change is an EF Core migration, reviewed as SQL before it is
+applied. Never edit a migration that has been applied anywhere but your own machine; add a new
+one. Never `EnsureCreated`, never out-of-band DDL.
 
-**Time is `IClock`, never `DateTime.UtcNow`.** `SystemClock` is the only place in the codebase
-that reads the machine's wall clock. `FixedClock` in the unit tests is what makes timestamp
-assertions exact instead of approximate — and an approximate assertion about time is a flaky
-test waiting for a slow CI runner.
+**The API contract.** `docs/api/openapi.json` is generated from the compiled API by
+`./scripts/generate-openapi.sh` and committed; CI fails when it drifts. Clients generate their types
+from it. Never hand-edit it. A missing `[ProducesResponseType]` is a bug, and a contract change is
+reviewed as a diff of that file.
 
-**OpenAPI is the published contract.** Consumers generate their clients from it, so a missing
-`[ProducesResponseType]` is a bug, not a documentation gap. See [docs/api/](docs/api/).
+**Identity tests.** Test the user-visible outcome of an auth change (the status, the page, the
+capability flags), not only that a request was sent. `AjBoilerplate.Auth.Tests` covers the Auth
+service; the API's integration tests act as a role through a test authentication handler.
 
-**Tests.** Failing test first, then the code. Unit tests for domain and use-case logic,
+**Tests.** Failing test first, then the code. Unit tests for domain and handler logic,
 integration tests for anything crossing a boundary.
 
 ## Non-negotiable rules
@@ -251,16 +252,15 @@ integration tests for anything crossing a boundary.
    `sonar.pullrequest.*`, or a `branch`/`pullRequest` MCP argument. See
    `.claude/standards/sonarqube.md`.
 4. **Build with warnings as errors.** A warning is a failure.
-5. **Respect the layer dependency rule**, including `Application ↛ Contracts` and
-   `Api ↛ Domain`. If a change needs to break it, the design is wrong.
+5. **Respect the layer dependency rule.** If a change needs to break it, the design is wrong.
 6. **Migration-based schema changes only.**
-7. **No EF Core entity on the wire**, in either direction. DTOs at the boundary, always.
+7. **The OpenAPI document is the contract**: commit it with the change, never hand-edit it.
 8. **One task per session, fresh context per task.** No unattended multi-hour runs.
 9. **Human review is mandatory** and is never waived because an agent wrote the code. The
    developer who prompted it owns it. Keep PRs to roughly 400 changed lines.
 10. **Update the docs with the change.** If a convention changed, `CLAUDE.md` changes in the
     same PR. If a decision was made, an ADR lands with it. If a contract changed, the OpenAPI
-    document and `docs/api/` change with it.
+    document changes with it, and consumers regenerate their types.
 11. **Classify the task and state the model tier before the first tool call.** Frontier tier
     for architecture, security review, complex debugging, high-risk refactors, and the final
     pre-push review; workhorse tier for everything else. Say the recommendation out loud in
@@ -278,13 +278,13 @@ integration tests for anything crossing a boundary.
 | Hooks and their triggers | `.claude/hooks/` · `.claude/README.md` |
 | Model routing (enforced every prompt) | `.claude/model-routing.md` |
 | The SonarQube gate, Community Build setup | `.claude/standards/sonarqube.md` |
-| Every layer, and why each boundary exists | [docs/architecture.md](docs/architecture.md) |
-| The "what's new" module, and how to ship an announcement | [docs/whats-new.md](docs/whats-new.md) |
 | Five-stage workflow and guardrails | [docs/workflow.md](docs/workflow.md) |
 | Definition of Done | [docs/definition-of-done.md](docs/definition-of-done.md) |
 | Day-1 checklist | [docs/onboarding.md](docs/onboarding.md) |
 | Spec template | [docs/specs/TEMPLATE.md](docs/specs/TEMPLATE.md) |
+| The "What's new" module, end to end | [docs/whats-new.md](docs/whats-new.md) |
 | Architecture decisions | [docs/adr/](docs/adr/) |
 | API contract workflow | [docs/api/README.md](docs/api/README.md) |
 | Session handoffs | [docs/handoff/](docs/handoff/) |
+| Sign-in: overview, setup, troubleshooting, contract | [docs/auth/](docs/auth/README.md) |
 | Infrastructure | [infra/gcp/README.md](infra/gcp/README.md) · [infra/azure/README.md](infra/azure/README.md) |

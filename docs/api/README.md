@@ -1,14 +1,12 @@
 # The API contract
 
 **The OpenAPI document is the contract.** It is the single source of truth for every request
-shape, response shape, status code, and error code that crosses this service's boundary. If
-something is not in the OpenAPI document, a consumer cannot rely on it.
+shape, response shape, status code, and error code that crosses the boundary between the two
+stacks. If something is not in the OpenAPI document, the frontend cannot rely on it.
 
-This repository is the **producer** of that document. Client code is not written here — consumers
-generate their own clients from what this API publishes.
-
-See [ADR-0005](../adr/0005-apiresponse-envelope-and-status-code-contract.md) for the envelope
-every response uses.
+See [ADR-0004](../adr/0004-openapi-generated-frontend-types.md) for why, and
+[ADR-0005](../adr/0005-apiresponse-envelope-and-status-code-contract.md) for the envelope every
+response uses.
 
 ---
 
@@ -18,7 +16,27 @@ It is produced **from the code**, not written by hand. The API generates it from
 and the types in `AjBoilerplate.Contracts`, so it cannot describe an endpoint that does not
 exist or a shape the server does not actually serialise.
 
-With the API running:
+[`openapi.json`](openapi.json) in this folder is the **committed snapshot**, and it is the file the
+frontend generates from. Regenerate it whenever you change the contract:
+
+```bash
+cd .
+./scripts/generate-openapi.sh            # rewrite openapi.json
+./scripts/generate-openapi.sh --check    # fail if it is out of date (what CI runs)
+```
+
+Neither needs a running API or a database — the script loads the built assembly and asks the same
+`ISwaggerProvider` the `/swagger` endpoint uses.
+
+**CI fails the build when the snapshot and the API disagree** (the `OpenAPI contract snapshot` job in
+`.github/workflows/backend-ci.yml`). That is what makes this document a contract rather than a
+description of one: without the gate, an endpoint could be renamed or a field dropped and nothing
+would object until a client broke. When it fails, read the diff — if the change was intended,
+regenerate and commit the snapshot alongside the code change so the contract change is *reviewed*
+rather than discovered; if it was not, fix the API. Regenerating to silence the gate defeats it
+entirely.
+
+With the API running you can also browse it live:
 
 | Artefact | URL |
 |---|---|
@@ -32,66 +50,41 @@ the following non-optional on every action:
   **every** status code the action can return, including the failures.
 - `[ApiVersion]` and a versioned route: `/api/v{version}/{resource}`.
 - XML documentation comments on contract types and their properties — they become the
-  descriptions in every generated client and in the Swagger UI.
-- Accurate nullability. An optional field and a required one produce different generated code,
-  and the difference is the whole point.
-- Enums declared as enums, not as strings, so a generated client gets a closed type.
+  descriptions in the generated client and in the UI.
+- Accurate nullability. A `string?` and a `string` produce different TypeScript, and the
+  difference is the whole point.
+- Enums declared as enums, not as strings, so the client gets a union type.
 
 An action with a single `ProducesResponseType` for the happy path produces a client that has no
 idea how the endpoint fails. Treat a missing failure annotation as a bug.
 
-The conventions behind all of this are in
-[`.claude/standards/swagger-openapi.md`](../../.claude/standards/swagger-openapi.md).
-
 ---
 
-## What is published today
+## How the frontend consumes it
 
-Two controllers, and everything below is generated from them. Every response is wrapped in the
-`ApiResponse<T>` envelope described in
-[ADR-0005](../adr/0005-apiresponse-envelope-and-status-code-contract.md).
+```bash
+# from the committed snapshot — no API process required
+cd src/frontend
+npm run generate:api
+```
 
-| Method | Route | Policy | Success |
-|---|---|---|---|
-| `GET` | `/api/v1/items` | `ReadAccess` | `200` `PagedResponse<ItemResponse>` |
-| `GET` | `/api/v1/items/{id}` | `ReadAccess` | `200` `ItemResponse` |
-| `POST` | `/api/v1/items` | `WriteAccess` | `201` + `Location` |
-| `PUT` | `/api/v1/items/{id}` | `WriteAccess` | `200` `ItemResponse` |
-| `DELETE` | `/api/v1/items/{id}` | `WriteAccess` | `204` |
-| `GET` | `/api/v1/features/unack?path=…` | `ReadAccess` | `200` `FeatureAnnouncementResponse[]` |
-| `POST` | `/api/v1/features/ack` | `ReadAccess` | `204` |
+This rewrites `libs/data-access/api-types` from the live document. That library is **generated
+output**:
 
-`items` is the sample slice and is expected to disappear from this table on your first day.
-`features` is the ["what's new" module](../whats-new.md) and is expected to stay, so its two
-endpoints are part of the contract a consumer may rely on. Three properties of them are contract,
-not implementation detail, and changing any one of them breaks clients:
+- It is committed, so builds are reproducible and contract changes show up in code review.
+- It is never hand-edited. If the output is wrong, fix the annotations in the API and regenerate.
+- Nothing else in the workspace declares a type that mirrors a server contract.
 
-- **`GET unack` returns an array ordered by `DisplayOrder`, then `CreatedAt`.** A client renders
-  them in the order it receives them and does not re-sort.
-- **`POST ack` is idempotent and answers `204` with no body.** Acknowledging the same id twice, or
-  acknowledging an id that names no announcement, is a success — so a client may retry a failed
-  dismissal without special handling, and never has to interpret a `409`.
-- **Both require only `ReadAccess`.** Dismissing a popup is not a write privilege. A consumer
-  integrating against a read-only role can rely on being able to clear it.
+`libs/data-access/api-client` is the hand-written layer on top. It is thin by design: it makes
+the HTTP call, unwraps the `ApiResponse<T>` envelope, maps a failure `code` to something the UI
+can act on, and returns typed data. It imports every type from `api-types` and declares none of
+its own.
 
-The response deliberately omits the announcement's targeting and lifecycle state (`PagesJson`,
-`IsActive`): the server decides what applies to a route, and publishing those fields would invite a
-client to re-implement that decision.
+Screen-specific view models are fine and expected. A hand-written *duplicate* of a server
+contract type is not.
 
----
-
-## How consumers use it
-
-Consumers **generate** their client from this document; they do not hand-write types that mirror
-these contracts. That is not this repository's job to enforce, but it is this repository's job to
-make possible — which is what the annotation rules above are for.
-
-The practical consequence for work done here: the OpenAPI document is a published artefact, and
-changing it is a contract change even when no C# consumer exists yet. Sloppy annotations produce
-sloppy clients somewhere you cannot see.
-
-A useful habit is to fetch `/swagger/v1/swagger.json` after a contract change and read the diff
-before opening the pull request. It is the same diff a consumer will regenerate from.
+The `/sync` command runs the regeneration and then checks for duplicated DTOs and for endpoints
+being called without a version prefix.
 
 ---
 
@@ -103,12 +96,11 @@ The order matters, and it is always this order:
    [the spec template](../specs/TEMPLATE.md) §3, before any code. New `code` values are declared
    there.
 2. **Server.** Implement it, with complete annotations.
-3. **Verify the document.** Run the API and read the generated OpenAPI diff.
-4. **Announce.** A breaking change needs a new version and an ADR before consumers are asked to
-   move.
-5. **Review.** The contract diff is part of the pull request and is reviewed, not skimmed.
+3. **Regenerate.** `npm run generate:api` (or `/sync`).
+4. **Consume.** Update the client and the feature code against the new types.
+5. **Review.** The generated diff is part of the pull request and is reviewed, not skimmed.
 
-Never run this backwards. Writing a client type first and making the server match it is how a
+Never run this backwards. Writing the client type first and making the server match it is how a
 contract stops describing the system.
 
 ---
@@ -126,22 +118,27 @@ A change is **additive** — and safe within a version — if it adds an optiona
 endpoint, adds a new `code` value, or adds an enum member the client can treat as unknown.
 
 The spec template's breaking-change checklist (§3) exists to force this judgement before the code
-is written rather than after a consumer breaks.
-
-Full rules: [`.claude/standards/api-versioning.md`](../../.claude/standards/api-versioning.md).
+is written rather than after the client breaks.
 
 ---
 
-## What clients are told to branch on
+## Error handling on the client
 
-`code`, never `message`. `code` is a stable `SCREAMING_SNAKE_CASE` slug declared in
-`AjBoilerplate.Contracts.Common.EnvelopeCodes`; `message` is human-readable and may be reworded
-or localised at any time.
+Branch on `code`. Never on `message`.
 
-That contract only holds if it holds here: never invent a `code` inline in a controller, and
-never reword a `code` because a message read better. Add the constant, document it in the spec,
-and list it in the OpenAPI document.
+```ts
+// code is stable and part of the contract; message is human-readable and may change.
+if (error.code === 'CONFLICT') { /* offer to reload */ }
+```
 
-Every failure response also carries `traceId` — the correlation identifier that appears in this
-service's logs and traces. Consumers are expected to surface it, which is only useful if the
-value is genuinely the one in the logs.
+Every error state in the UI surfaces the response's `traceId`, because that is the value a user
+can read out to support and support can find in the logs.
+
+---
+
+## For the frontend-only repository
+
+`aj-boilerplate-fe` has no backend to generate from, so it ships a committed OpenAPI document
+that `npm run generate:api` reads from disk instead of over HTTP. Keep that document current
+with whichever API the project actually talks to — a stale committed contract is worse than no
+contract, because it looks authoritative.

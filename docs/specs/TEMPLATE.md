@@ -34,9 +34,9 @@
 
 ## 2. Acceptance criteria
 
-> Every criterion is Given/When/Then, independently testable, and observable through the API —
-> not through internal state. These become the tests. A criterion nobody can write a test for is
-> not a criterion; rewrite it.
+> Every criterion is Given/When/Then, independently testable, and observable through the API or
+> the UI — not through internal state. These become the tests. A criterion nobody can write a
+> test for is not a criterion; rewrite it.
 
 | # | Criterion |
 |---|---|
@@ -52,9 +52,8 @@ must show that test passing.
 
 ## 3. API contract
 
-> **OpenAPI first.** Agree the contract here, then land it in the API — with a
-> `[ProducesResponseType]` for every status code the action can return, so the published document
-> describes the failures as well as the success. Consumers generate their clients from it.
+> **OpenAPI first.** Agree the contract here, land it in the API's OpenAPI document, then
+> regenerate the frontend types (`npm run generate:api`). Never hand-write a client DTO.
 > See [docs/api/README.md](../api/README.md).
 
 ### Endpoints
@@ -123,22 +122,23 @@ Does this store personal data? For how long? How is it deleted?
 
 ---
 
-## 5. Behaviour under load, concurrency, and failure
+## 5. UI states
 
-> The cases nobody writes a test for until production writes one for them. A section that says
-> "none" is fine; a section that is missing is a decision nobody made.
+> Every screen ships all four states. A missing empty state or error state is an incomplete
+> feature, not a follow-up ticket. PrimeNG components only.
 
-| Concern | Decision |
+| State | Behaviour |
 |---|---|
-| **Concurrency** | which writes contend, and what a losing writer sees — `409` `CONFLICT` via `RowVersion`, or a documented last-write-wins |
-| **Idempotency** | can this request be safely retried? If `POST`, what makes a duplicate detectable? |
-| **Paging and limits** | default and maximum page size; what an unbounded query would cost at production volume |
-| **Rate limiting** | does this endpoint need its own policy, or does the global one suffice? |
-| **Timeouts and retries** | for anything crossing a network boundary: how long, how many, and what the caller sees when it gives up |
-| **Partial failure** | if this writes and then publishes an event, what guarantees the two agree? (Outbox, or say why not) |
+| **Loading** | skeleton (not a spinner) for the list; controls disabled; no layout shift on resolve |
+| **Empty** | explains *why* it is empty and offers the primary action |
+| **Error** | human-readable message derived from the response `code`, a retry affordance, and the `traceId` visible for support |
+| **Success** | the populated view; confirm destructive actions; toast on write |
 
-Also specify what an **unauthorised** caller sees — a `403`, or a `404` when the resource's
-existence is itself confidential — and whether the attempt is recorded.
+Also specify: validation behaviour and when it fires, keyboard and screen-reader behaviour,
+responsive behaviour, and what a user without permission sees (hidden vs. disabled).
+
+**Route(s):** `/…`
+**Nx library:** `libs/feature-<name>`
 
 ---
 
@@ -149,6 +149,8 @@ existence is itself confidential — and whether the attempt is recorded.
 | **Unit** | domain invariants, handler branches, validators, mappers | `AjBoilerplate.UnitTests` |
 | **Integration** | endpoint round trip, persistence, auth policy, concurrency, error mapping | `AjBoilerplate.IntegrationTests` |
 | **Architecture** | new projects/references still obey the layer rule | `AjBoilerplate.ArchitectureTests` |
+| **Component** | Angular component states, signals, form validation | `libs/feature-<name>` (Vitest) |
+| **E2E** | the one critical journey a user must never lose | `apps/web-e2e` (Playwright) |
 
 **Traceability**
 

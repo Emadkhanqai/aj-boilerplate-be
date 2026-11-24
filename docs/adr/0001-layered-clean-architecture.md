@@ -101,8 +101,8 @@ resist that growth.
 
 ### Layered, but merging `Contracts` into `Application`
 
-One fewer project. Rejected because consumers generate their client types from the shapes in
-`Contracts`; keeping them in a project with no dependencies except serialisation makes it
+One fewer project. Rejected because the frontend's generated types are produced from the shapes
+in `Contracts`; keeping them in a project with no dependencies except serialisation makes it
 obvious that changing one is a contract change, per [ADR-0005](0005-apiresponse-envelope-and-status-code-contract.md).
 
 ### Doing nothing (leaving structure to each consuming team)

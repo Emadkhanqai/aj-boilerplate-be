@@ -23,7 +23,7 @@ approved spec is how scope and correctness both drift.
    | **Domain model** | Entities, fields, relationships, and the **invariants** each must hold |
    | **API surface** | Endpoints, request/response DTOs, status codes, `code` values, auth policy |
    | **Authorization** | Who may do what; which fields are restricted from whom |
-   | **Load, concurrency, failure** | Contention, idempotency, paging caps, rate limits, timeouts, partial failure |
+   | **UI** | Screens, states (loading/error/empty/success), and the journeys |
    | **Data & migration** | Schema changes, indexes, concurrency tokens, backfill plan |
    | **Observability** | What is logged, traced, and audited |
    | **Risks / open questions** | Named, with an owner — never left implicit |

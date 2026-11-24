@@ -17,8 +17,8 @@ All public APIs are versioned. Contracts never break silently.
 - **Never break an existing contract silently.** Additive, backward-compatible changes (a new
   optional field, a new endpoint) may stay within the current version.
 - **OpenAPI exposes versioned groups** — one document group per version (`v1`, `v2`) — so the
-  every consumer's generator targets a specific version.
-- **Only versioned routes are published.** No endpoint ships on an unversioned path.
+  frontend generator targets a specific version.
+- **The frontend consumes versioned endpoints only.** No calls to unversioned paths.
 - **Deprecation, not deletion:** a superseded version is marked `deprecated: true` in OpenAPI
   and kept for an agreed window before removal, with `Deprecation` / `Sunset` headers emitted
   (see [`middleware.md`](middleware.md)).

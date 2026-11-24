@@ -24,7 +24,7 @@
 
 ## Migration workflow
 
-Run from the repository root:
+Run from `./`:
 
 ```bash
 # Create a migration

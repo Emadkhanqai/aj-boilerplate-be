@@ -56,25 +56,24 @@ Collections use `PagedResponse<T>`, carrying `items`, `page`, `pageSize`, `total
    only thing a client may branch on. `message` is for humans and may be reworded or localised
    at any time.
 4. **`traceId` is always present** and matches the correlation identifier in the logs and the
-   distributed trace. Clients surface it in their error state so a user can quote it.
+   distributed trace. It is surfaced in the UI's error state so a user can quote it.
 5. **Controllers never construct an error response.** Handlers throw typed exceptions; an
    `IExceptionHandler` chain — Validation → Conflict → Forbidden → Unhandled — maps them to
    status code and `code`. Unhandled exceptions never leak a stack trace or an internal message.
 6. **A result filter applies the envelope**, so controllers return the payload and stay thin.
 7. **New `code` values are declared in the spec before use** and listed in the OpenAPI document,
-   so they reach every consumer through the published contract (see
-   [docs/api/README.md](../api/README.md)).
+   so they reach the frontend through [ADR-0004](0004-openapi-generated-frontend-types.md).
 
 ## Consequences
 
 ### Positive
 
-- One unwrapping path in every client, one error-handling path, one place to add cross-cutting
-  response behaviour.
+- One unwrapping path in `api-client`, one error-handling path in the UI, one place to add
+  cross-cutting response behaviour.
 - `traceId` on every response makes support tractable: the identifier the user reads out is the
   identifier in the logs.
-- Stable `code` values let a client react meaningfully — a `CONFLICT` can offer to reload, a
-  `VALIDATION_ERROR` can map `errors[]` onto form fields — without parsing prose.
+- Stable `code` values let the UI react meaningfully — a `CONFLICT` can offer to
+  reload, a `VALIDATION_ERROR` can map `errors[]` onto form fields — without parsing prose.
 - Adding a field to the envelope is backward compatible for every existing client.
 
 ### Negative
@@ -110,8 +109,8 @@ correlation field, or paging metadata uniformly on success responses.
 
 ### Bare payloads with everything in headers
 
-Cleanest bodies. Rejected: headers are awkward to reach from many client stacks, invisible in
-most logs and API clients, and easily dropped by intermediaries.
+Cleanest bodies. Rejected: headers are awkward to reach in browser code, invisible in most
+logs and API clients, and easily dropped by intermediaries.
 
 ### GraphQL-style `200` for everything with errors in the body
 

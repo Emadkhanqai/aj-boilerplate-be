@@ -39,6 +39,7 @@ The target depends on `CLOUD_PROVIDER` — see [`../standards/cloud.md`](../stan
 | | `gcp` | `azure` |
 |---|---|---|
 | API | Cloud Run | App Service / Container Apps |
+| Frontend | Cloud Run or static hosting | App Service / Static Web Apps |
 | Database | Cloud SQL for SQL Server | Azure SQL Database |
 | Cache | Memorystore for Redis | Azure Cache for Redis |
 | Secrets | Secret Manager | Key Vault |

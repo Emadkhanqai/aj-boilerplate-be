@@ -23,23 +23,26 @@ change.
 
 - **Work on a branch, never `main`.** TDD where it fits: failing test → minimal code → green →
   refactor → commit.
-- Respect the Clean Architecture boundaries — the architecture tests will catch you, but the
-  point is not to need them.
-- DTOs only at the boundary — never bind EF Core entities; FluentValidation on
+- Respect the Clean Architecture boundaries and the Nx module boundaries.
+- **Backend:** DTOs only at the boundary — never bind EF Core entities; FluentValidation on
   every request; `ApiResponse<T>` with `traceId`; versioned routes; deny-by-default
   authorization with an object-ownership check after load; restricted fields removed by DTO
   projection; `decimal` for money; audit append-only.
 - **Schema change** → an EF Core migration with a business-intent name, reviewed by hand. Never
   edit an applied migration.
+- **Frontend:** standalone components, OnPush, signals, `inject()`, typed reactive forms,
+  PrimeNG only, generated API types only. Read `src/frontend/DESIGN.md` before building UI.
 - Start from the templates rather than from scratch:
   [`domain-entity.md`](../templates/domain-entity.md),
-  [`api-controller.md`](../templates/api-controller.md).
+  [`api-controller.md`](../templates/api-controller.md),
+  [`angular-component.md`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/.claude/templates/angular-component.md).
 - Keep the diff to the task. An unrelated "while I was in here" fix belongs in its own commit.
 
 ## Finish
 
-- `dotnet build -warnaserror && dotnet test`.
-- If the API surface changed: complete the OpenAPI annotations and refresh `docs/api/`.
+- `dotnet build && dotnet test`; `npx nx run-many -t lint typecheck test build` where the
+  frontend changed.
+- If the API surface changed: update OpenAPI and run [`/sync`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/.claude/commands/sync.md).
 - Run [`/qa`](qa.md), then [`/review`](review.md).
 - **Do not push.** Summarise what you did, what you verified (with the actual command output),
   and what is still open. Then wait for explicit approval.

@@ -1,5 +1,5 @@
 ---
-description: Run the full local quality gate — build, format, test, dependency audit, secret scan, and SonarQube. Never pushes.
+description: Run the full local quality gate — build, format, test, lint, typecheck, dependency audit, secret scan, and SonarQube. Never pushes.
 ---
 
 # /qa
@@ -7,14 +7,24 @@ description: Run the full local quality gate — build, format, test, dependency
 The complete local gate. Run it before [`/review`](review.md) and before proposing any push.
 **This command never pushes.**
 
-## Build, format, test
+## Backend
 
 ```bash
+cd .
 dotnet restore
 dotnet build --no-incremental                      # warnings are errors
 dotnet format --verify-no-changes                  # style gate
 dotnet test --collect:"XPlat Code Coverage"        # unit + integration + architecture
 dotnet list package --vulnerable --include-transitive
+```
+
+## Frontend
+
+```bash
+cd src/frontend
+npx nx run-many -t lint typecheck test build
+npx nx e2e web-e2e                                 # when a route or journey changed
+npm audit --audit-level=high
 ```
 
 ## Secrets

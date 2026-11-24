@@ -32,6 +32,10 @@ Review the working changes before proposing a push.
    - **EF Core / database** — migration present, business-named, hand-reviewed, not an edit to
      an applied one; `decimal` money; append-only audit; `AsNoTracking` and pagination;
      concurrency token ([`../standards/efcore-migrations.md`](../standards/efcore-migrations.md)).
+   - **Frontend** — standalone + OnPush + signals + `inject()`, PrimeNG only, typed reactive
+     forms, generated API types only, no `any`, all four data states handled, axe-core clean
+     ([`../standards/angular.md`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/.claude/standards/angular.md),
+     [`../standards/typescript.md`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/.claude/standards/typescript.md)).
    - **Tests** — every new behaviour, error path, and authorization rule covered
      ([`../standards/testing.md`](../standards/testing.md)).
 

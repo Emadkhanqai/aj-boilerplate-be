@@ -4,8 +4,9 @@
 # Runs the tests affected by the file that was just edited, so a break is found
 # in seconds rather than at the quality gate.
 #
-#   .cs -> dotnet test on the touched project if it is a test project,
-#          otherwise the fast unit-test project
+#   backend  .cs  -> dotnet test on the touched project if it is a test project,
+#                    otherwise the fast unit-test project
+#   frontend .ts  -> nx test on the Nx project that owns the file
 #
 # NON-BLOCKING BY DESIGN. It never exits 2. A failure exits 1, which surfaces the
 # output to the agent as a warning without cancelling the edit.
@@ -58,7 +59,7 @@ FILE="$(json_str 'tool_input.file_path')"
 
 # Nothing to run for these.
 case "$FILE" in
-  */bin/*|*/obj/*|*/.git/*|*/Migrations/*) exit 0 ;;
+  */node_modules/*|*/bin/*|*/obj/*|*/dist/*|*/.git/*|*/Migrations/*|*/api-types/*) exit 0 ;;
 esac
 
 # Run with a wall-clock bound when 'timeout' is available; the hook must never
@@ -83,6 +84,9 @@ find_up() {   # find_up <start-dir> <glob>  -> prints the first match going upwa
   return 1
 }
 
+# ---------------------------------------------------------------------------
+# Backend
+# ---------------------------------------------------------------------------
 run_dotnet() {
   command -v dotnet >/dev/null 2>&1 || {
     printf '[run-affected-tests] dotnet not installed — skipping\n' >&2; exit 0; }
@@ -96,7 +100,7 @@ run_dotnet() {
     *Tests.csproj|*Test.csproj) : ;;                # edited a test project: run it
     *)
       # Edited a source project: run the fast unit-test project instead.
-      # The integration suite is deliberately left to /qa — this hook has
+      # Integration and E2E suites are deliberately left to /qa — this hook has
       # to stay quick enough that nobody is tempted to switch it off.
       #
       # Walk up to the solution root (the directory holding the .sln/.slnx, or
@@ -144,9 +148,59 @@ run_dotnet() {
   exit 1                                    # non-blocking: surfaced, not enforced
 }
 
+# ---------------------------------------------------------------------------
+# Frontend
+# ---------------------------------------------------------------------------
+run_nx() {
+  command -v npx >/dev/null 2>&1 || {
+    printf '[run-affected-tests] npx not installed — skipping\n' >&2; exit 0; }
+
+  start="$(cd "$(dirname "$FILE")" && pwd)"
+  pj="$(find_up "$start" 'project.json')" || {
+    printf '[run-affected-tests] no Nx project.json above %s — skipping\n' \
+      "${FILE##*/}" >&2; exit 0; }
+
+  name=""
+  if command -v jq >/dev/null 2>&1; then
+    name="$(jq -r '.name // empty' "$pj" 2>/dev/null)"
+  elif command -v python3 >/dev/null 2>&1; then
+    name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("name",""))' \
+             "$pj" 2>/dev/null)"
+  fi
+  [ -z "$name" ] && name="$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$pj" | head -n 1)"
+  [ -z "$name" ] && { printf '[run-affected-tests] could not read the Nx project name — skipping\n' >&2; exit 0; }
+
+  wsroot="$(dirname "$pj")"
+  while [ "$wsroot" != "/" ] && [ ! -f "$wsroot/nx.json" ]; do
+    wsroot="$(dirname "$wsroot")"
+  done
+  [ -f "$wsroot/nx.json" ] || { printf '[run-affected-tests] no nx.json found — skipping\n' >&2; exit 0; }
+
+  out="$(cd "$wsroot" && run_bounded npx --no-install nx test "$name" --skip-nx-cache=false 2>&1)"
+  rc=$?
+
+  if [ "$rc" -eq 0 ]; then exit 0; fi
+  if [ "$rc" -eq 127 ]; then
+    printf '[run-affected-tests] nx is not installed in this workspace — skipping\n' >&2
+    exit 0
+  fi
+  if [ "$rc" -eq 124 ]; then
+    printf '[run-affected-tests] nx test %s exceeded %ss — not run to completion.\n' \
+      "$name" "$TIMEOUT_S" >&2
+    exit 1
+  fi
+
+  {
+    printf '[run-affected-tests] TESTS FAILING in Nx project "%s"\n\n' "$name"
+    printf '%s\n' "$out" | tail -n 60
+  } >&2
+  exit 1
+}
+
 case "$FILE" in
-  *.cs) run_dotnet ;;
-  *)    exit 0 ;;
+  *.cs)                       run_dotnet ;;
+  *.ts|*.tsx|*.mts|*.cts)     run_nx ;;
+  *)                          exit 0 ;;
 esac
 
 exit 0

@@ -17,8 +17,8 @@ claude --version
 ```
 
 This repository is designed to be driven with Claude Code. Everything here works without it —
-the commands are ordinary `dotnet` commands — but the guardrails in `.claude/` only apply when
-you are using it.
+the commands are ordinary `dotnet` and `nx` commands — but the guardrails in `.claude/` only
+apply when you are using it.
 
 ### Plugins
 
@@ -50,26 +50,42 @@ git clone https://github.com/<your-org>/<this-repo>.git
 cd <this-repo>
 ```
 
-**Prerequisites:** .NET SDK 10, Docker (the integration suite starts its own SQL Server), a
-reachable SQL Server and Redis for running the app, and access to the project's Keycloak realm.
-Ask your tech lead for the local configuration values — they are not in the repository, and they
-never will be.
+**Prerequisites:** Docker. That is all you need to run everything. To build, test or debug outside
+Docker you also need the **.NET SDK 10** and **Node.js 22**.
 
 ```bash
-export CLOUD_PROVIDER=gcp    # or azure — ask which one this project uses
-export ConnectionStrings__Default='Server=localhost,1433;Database=AjBoilerplate;User Id=sa;Password=<your-local-password>;TrustServerCertificate=True;'
-export APP_DB_CONNECTION="$ConnectionStrings__Default"   # what the design-time factory reads
-
-dotnet tool restore                 # dotnet-ef, pinned in .config/dotnet-tools.json
-dotnet ef database update \
-  --project        src/AjBoilerplate.Infrastructure \
-  --startup-project src/AjBoilerplate.Api
-
-dotnet run --project src/AjBoilerplate.Api    # → http://localhost:5080
+cp .env.example .env          # then set MSSQL_SA_PASSWORD to any strong local value
+docker compose up --build     # SQL Server, Redis, Keycloak, migrations, Auth service, API, web
 ```
 
-Open <http://localhost:5080/swagger> and exercise the sample `Item` endpoints. Seeing the round
-trip work end to end now means that when something breaks later you know it is you.
+Wait for it to settle (the first run imports the Keycloak realm), then open
+<http://localhost:4200> and sign in as `admin`, `editor` or `viewer` (password in the root
+README). No Microsoft tenant and no secrets from your tech lead are needed: the local stack uses a
+bundled Keycloak with committed, dev-only values. Also try `noaccess`, to see what a user with no
+role gets.
+
+Open **Items** and create, edit and delete a row. Seeing the sample feature work end to end now
+means that when something breaks later you know it was you.
+
+If you are stuck, [docs/auth/troubleshooting.md](auth/troubleshooting.md) covers the usual
+suspects (a stale SQL volume, a port in use, Keycloak not ready).
+
+**Working on one stack without Docker:**
+
+```bash
+# backend: the tool manifest and the SDK pin live in ., so run EF from there
+(cd . && dotnet tool restore && dotnet ef database update \
+    --project src/AjBoilerplate.Infrastructure --startup-project src/AjBoilerplate.Api)
+dotnet run --project ./src/AjBoilerplate.Api    # http://localhost:5080, 401 without Keycloak settings
+
+# frontend: no backend needed
+cd src/frontend && npm ci && npm run dev:offline          # http://localhost:4200, mocked API, role picker
+```
+
+The sign-in flow itself only runs in the compose stack. Ask your tech lead whether this project
+runs `AUTH_PROVIDER=embedded` (it deploys its own Auth service) or `usp` (inside the Al Jazeera
+USP platform), and which cloud (`CLOUD_PROVIDER`) it targets. Real Entra and Keycloak values are
+never in the repository; they come from the project's secrets provider.
 
 ---
 
@@ -80,9 +96,12 @@ In this order:
 1. **[`CLAUDE.md`](../CLAUDE.md)** at the repository root — the stack, the architecture, the
    layer dependency rule, the commands, and the non-negotiable rules. Read it properly. It is
    short on purpose.
-2. **[`docs/architecture.md`](architecture.md)** — what each layer is for, what may not live
-   there, and why the boundaries exist.
-3. **`.claude/standards/`** — skim the index, read in full whichever standards cover what you
+2. **[`src/frontend/CLAUDE.md`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/src/frontend/CLAUDE.md)** if you will touch the frontend. There
+   is no backend `CLAUDE.md`; the backend's conventions are in the root file and
+   [`./README.md`](../README.be.md).
+3. **[`docs/auth/README.md`](auth/README.md)** — ten minutes, and it explains the part of this
+   system that surprises people most: the browser holds no token.
+4. **`.claude/standards/`** — skim the index, read in full whichever standards cover what you
    are about to touch.
 
 Note the hard rule while you are there: **never put a secret, connection string, token, or
@@ -101,9 +120,12 @@ Before you change anything, prove the baseline works on your machine.
 Or the underlying commands, if you prefer to see them:
 
 ```bash
-dotnet build  -warnaserror
-dotnet format --verify-no-changes
-dotnet test                       # all three suites; the integration one needs Docker
+dotnet build ./AjBoilerplate.slnx -warnaserror
+dotnet format ./AjBoilerplate.slnx --verify-no-changes
+dotnet test  ./tests/AjBoilerplate.UnitTests
+dotnet test  ./tests/AjBoilerplate.ArchitectureTests
+dotnet test  ./tests/AjBoilerplate.IntegrationTests
+cd src/frontend && npx nx affected -t lint,test,build
 ```
 
 **Everything must be green before you write a line of code.** If it is not, that is today's
@@ -114,7 +136,7 @@ missing prerequisite, and it is worth fixing in the setup documentation for the 
 
 ## 5. Ship one small change, end to end
 
-Pick something genuinely small with your tech lead — a validation message, a new optional field,
+Pick something genuinely small with your tech lead — a validation message, a missing empty state,
 a small endpoint. Then take it through
 [all five stages](workflow.md): **Spec → Plan → Execute → Verify → Review**.
 
@@ -148,9 +170,9 @@ blockquotes. It is the shape of every piece of work you will be asked to do here
 ## Checklist
 
 - [ ] Claude Code installed, authenticated, plugins enabled
-- [ ] Repository cloned, database migrated, the API running locally
-- [ ] Sample `Item` endpoints exercised through Swagger
-- [ ] `CLAUDE.md`, `docs/architecture.md`, and the relevant standards read
+- [ ] Repository cloned, database migrated, both stacks running locally
+- [ ] Sample feature exercised in the browser
+- [ ] Root `CLAUDE.md`, nested `CLAUDE.md`, and the relevant standards read
 - [ ] `/qa` green locally
 - [ ] One small change shipped through all five stages, pair-reviewed by the tech lead
 - [ ] Last five ADRs read

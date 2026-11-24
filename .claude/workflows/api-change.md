@@ -3,8 +3,8 @@
 > **Model routing (do first):** see [`../model-routing.md`](../model-routing.md). API
 > *implementation* → workhorse tier; a breaking *contract/versioning* decision → frontier tier.
 
-Changing the API surface (new endpoint, changed DTO, new version). Keeps the published
-contract honest and every consumer in lockstep.
+Changing the API surface (new endpoint, changed DTO, new version). Keeps contracts safe and
+the frontend in lockstep.
 
 ## 1. Classify the change
 
@@ -35,12 +35,12 @@ the auth requirement, and the version group
 ([`../standards/swagger-openapi.md`](../standards/swagger-openapi.md)). Refresh the committed
 snapshot in `docs/api/` so the contract change shows up in the diff.
 
-## 4. Verify what is actually published
+## 4. Sync frontend types
 
-Run the API and read `/swagger/v1/swagger.json`. That document — not the C# you just wrote — is
-what consumers generate against, so check it says what you meant: every status code present,
-nullability accurate, enums closed, descriptions carried across from the XML comments. If it is
-wrong, the annotation is wrong; never describe the endpoint correctly somewhere else instead.
+Run [`/sync`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/.claude/commands/sync.md) to regenerate `libs/data-access/api-types`. Remove any
+now-duplicated hand-written type or client, and update callers to the versioned endpoint. A
+type error after regeneration is the point of the exercise — fix the call site, never cast it
+away.
 
 ## 5. Test
 

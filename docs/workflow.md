@@ -89,17 +89,17 @@ design:
 ```mermaid
 flowchart LR
   subgraph P["PROBABILISTIC — judgement, may vary run to run"]
-    STD["standards/ · 20 files<br/>what good looks like"]
-    CMD["commands/ · 8 slash commands<br/>the procedure to follow"]
-    AGT["agents/ · 7 subagents<br/>who does which kind of work"]
+    STD["standards/ · 22 files<br/>what good looks like"]
+    CMD["commands/ · 9 slash commands<br/>the procedure to follow"]
+    AGT["agents/ · 9 subagents<br/>who does which kind of work"]
     WF["workflows/ · 7 procedures<br/>the long-form reasoning"]
-    TPL["templates/ · 5 starting points"]
+    TPL["templates/ · 6 starting points"]
   end
 
   subgraph D["DETERMINISTIC — fires every time, identical every time"]
     HOOK["hooks/ · 8 shell scripts<br/>exit 2 blocks the tool call"]
     PERM["settings.json permissions<br/>deny · ask · allow"]
-    CI["GitHub Actions<br/>backend-ci · deploy"]
+    CI["GitHub Actions<br/>backend-ci · frontend-ci · deploy"]
     ARCH["architecture tests<br/>compiled-reference assertions"]
   end
 
@@ -132,9 +132,9 @@ and are safe to run by hand.
 | `block-dangerous.sh` | PreToolUse `Bash` | **yes — exit 2** | Refuses `rm -rf`, `git push --force`, `git reset --hard`, `git clean -fdx`, history rewriting, `DROP DATABASE` / `TRUNCATE` / `DROP TABLE`, production connection strings, production cloud operations, `terraform apply`/`destroy`, and credential-exfiltration shapes. **No bypass variable exists.** |
 | `sonar-pre-push.sh` | PreToolUse `Bash`, only when the command is a `git push` | **yes — exit 2** | Queries the SonarQube quality gate and the open Blocker/Critical/Major list. Blocks while any is open, printing them. **Fails closed**: unreachable or unconfigured means the gate has not passed. |
 | `protect-files.sh` | PreToolUse `Edit`\|`Write`\|`MultiEdit`\|`NotebookEdit` | **yes — exit 2** | Refuses edits to `.env*` (templates excepted), `appsettings.Production.json`, **already-existing** EF Core migrations and the model snapshot, `infra/*/prod/**`, `.claude/settings.json`, and key material. **No bypass variable exists.** |
-| `auto-format.sh` | PostToolUse `Edit`\|`Write`\|… | no | Formats **only** the file just edited: `.cs` → `dotnet format`, scoped to the nearest `.csproj`. Everything else is left alone. A missing `dotnet` is a skip, never an error. |
+| `auto-format.sh` | PostToolUse `Edit`\|`Write`\|… | no | Formats **only** the file just edited. `.cs` → `dotnet format` scoped to the nearest `.csproj`; `.ts/.html/.scss/.css/.json/.md` → Prettier, plus `eslint --fix` for TypeScript. A missing tool is a skip, never an error. |
 | `secret-scan.sh` | PostToolUse `Edit`\|`Write`\|… (and usable as a git pre-commit hook) | **yes — exit 2** | Gitleaks on the changed file when installed, **plus** a built-in pattern set that always runs — PEM blocks, cloud keys, GitHub/Slack/Sonar tokens, JWTs, and connection strings carrying a password. Findings print redacted. |
-| `run-affected-tests.sh` | PostToolUse `Edit`\|`Write`\|… | no — exit 1 on failure | Runs the touched project's tests immediately — `dotnet test` on the edited test project, or on the unit-test project when a source file changed. **Never exits 2** — it surfaces a failure as a warning without cancelling the edit. Silent when nothing is affected. |
+| `run-affected-tests.sh` | PostToolUse `Edit`\|`Write`\|… | no — exit 1 on failure | Runs the touched project's tests immediately: `dotnet test` for `.cs`, `nx test` for `.ts`. **Never exits 2** — it surfaces a failure as a warning without cancelling the edit. Silent when nothing is affected. |
 | `session-handoff.sh` | Stop | never | Writes `docs/handoff/<date>-<session>.md` from `git status` and `git diff --stat` — no model call — and flags when `CLAUDE.md`, `docs/adr/`, or the OpenAPI snapshot look stale relative to what changed. Reports only. |
 
 Here is one ordinary edit, end to end:
@@ -190,9 +190,9 @@ same way:
   apply`/`destroy`, `kubectl delete`, reading `.env*` / `*.pem` / `~/.ssh/**` / cloud credential
   directories, editing `appsettings.Production.json`, `infra/*/prod/**`, or `.claude/settings.json`.
 - **`ask`** — always prompts a human: `git push`, `gh pr create`, `gh pr merge`, `gcloud`, `az`,
-  `dotnet ef database update`.
+  `npm publish`, `dotnet ef database update`.
 - **`allow`** — no prompt, because they are safe and constant: the `dotnet` build/test/format
-  commands, read-only git, and ordinary file inspection.
+  commands, `npm`/`npx nx`, read-only git, and ordinary file inspection.
 
 Note that `git push` appears in **`ask`** *and* is separately gated by `sonar-pre-push.sh`. Those
 are two independent controls: the hook decides whether the code has passed the gate, the permission
@@ -200,17 +200,18 @@ prompt decides whether a human has agreed to publish it.
 
 ### Which agent does what
 
-Seven subagent definitions live in `.claude/agents/`. They are prose — descriptions of a role and
+Nine subagent definitions live in `.claude/agents/`. They are prose — descriptions of a role and
 the standards it must apply — so an agent is a way of *loading the right context*, not a sandbox.
 
 | Agent | Stage it serves | Role |
 |---|---|---|
 | `master-agent` | all | Orchestrator: plans, routes to specialists, enforces the non-negotiables |
 | `backend-agent` / `backend-engineer` | 3 | .NET, Clean Architecture, EF Core, SQL Server |
-| `test-engineer` | 3 | Unit, integration, and architecture tests |
+| `frontend-agent` / `frontend-engineer` | 3 | Angular, Nx, PrimeNG, standalone + signals, generated types |
+| `test-engineer` | 3 | Unit, integration, architecture, component, E2E, accessibility tests |
 | `code-reviewer` | 5 | Reviews the diff against boundaries, standards, correctness, security |
 | `security-auditor` | 5 | OWASP baseline, SSO, scoped tokens, field-level confidentiality, secrets, audit log |
-| `quality-gate` | 4 | Runs build, format, test, and SonarQube and certifies readiness; never pushes |
+| `quality-gate` | 4 | Runs build, test, lint, SonarQube and certifies readiness; never pushes |
 
 ### Which command starts each stage
 
@@ -220,7 +221,9 @@ flowchart LR
   HUMAN --> TASK["/task"]
   TASK --> IMPL["/implement<br/>one task per session"]
   IMPL --> MIG["/new-migration<br/>if the schema changed"]
+  IMPL --> SYNC["/sync<br/>if the API surface changed"]
   MIG --> QA["/qa"]
+  SYNC --> QA
   IMPL --> QA
   QA --> QG["/quality-gate"]
   QG --> REV["/review"]
@@ -239,7 +242,7 @@ CI is the second deterministic layer, and it does not care what any agent believ
 
 ```mermaid
 flowchart TD
-  PR(["Pull request"]) --> R["restore"]
+  PR(["Pull request touching ./**"]) --> R["restore"]
   R --> F["format — dotnet format --verify-no-changes"]
   R --> B["build — warnings as errors"]
   B --> UT["unit + architecture tests"]
@@ -248,14 +251,21 @@ flowchart TD
   PR --> GL["Gitleaks"]
   PR --> CQ["CodeQL"]
 
-  MAIN(["push to main"]) --> QG["SonarQube quality gate<br/>main only — see below"]
+  PR2(["Pull request touching src/frontend/**"]) --> I["install — npm ci"]
+  I --> V["lint · typecheck · unit tests with coverage"]
+  I --> BLD["production build"]
+  I --> NA["npm audit --audit-level=high"]
+  V --> E2E["Playwright E2E"]
+  BLD --> E2E
+  PR2 --> GL2["Gitleaks"]
+  PR2 --> CQ2["CodeQL"]
 ```
 
-`backend-ci.yml` carries **no path filter**: this repository is the backend, so every change can
-affect it, and a filter would only create the classic "required check never reports" trap on a
-documentation-only pull request. Everything above runs on `pull_request` and on `push` to `main` —
-**except the SonarQube job, which is guarded to `push` on `main` only.** That guard is a Community
-Build consequence, explained [below](#a-note-on-sonarqube-community-build).
+Both workflows are path-filtered, so a backend-only change does not run the frontend suite. Both
+run on `pull_request` and on `push` to `main` — **except the SonarQube job in each, which is
+guarded to `push` on `main` only.** That guard is a Community Edition consequence, explained
+[below](#a-note-on-sonarqube-community-edition); the two stacks analyse under separate project
+keys (`SONAR_PROJECT_KEY` and `SONAR_PROJECT_KEY_FRONTEND`) so one does not overwrite the other.
 
 Deployment is a separate workflow. `deploy.yml` chains `dev → staging → prod`, each calling the
 reusable `deploy-environment.yml`. **The approval gate is GitHub's own environment protection
@@ -263,24 +273,22 @@ rules** — create `dev`, `staging`, and `prod` under *Settings → Environments
 reviewers to `staging` and `prod`. Without those rules the workflow promotes straight to
 production unreviewed.
 
-### A note on SonarQube: Community Build
+### A note on SonarQube: Community Edition
 
-The SonarQube used here is the **free Community Build**. That has a specific, load-bearing
+The SonarQube used here is the **free Community Edition**. That has a specific, load-bearing
 consequence:
 
-> **Community Build has no pull-request decoration and no branch analysis.** It analyses one
-> branch — the default branch — and that is all. There will be no Sonar comment on your pull
-> request, no per-branch quality gate, and no "new code on this branch" view. Never pass
-> `sonar.branch.name`, `sonar.pullrequest.*`, or a `branch`/`pullRequest` MCP argument: they need
-> Developer Edition or above, and adding them here only fails the analysis.
+> **Community Edition has no pull-request decoration and no branch analysis.** It analyses one
+> branch — the main branch — and that is all. There will be no Sonar comment on your pull request,
+> no per-branch quality gate, and no "new code on this branch" view.
 
 What that means in practice:
 
-- **The CI quality gate is a main-branch gate.** The Sonar job is guarded to run only on a `push`
-  to `main`, precisely because every Community Build analysis lands on the project's single default
-  branch — running it from a pull request would overwrite the dashboard with code that is not on
-  `main`. Treat it as the post-merge check that the trunk is still healthy, not as something that
-  can block your PR the way a decorated gate would.
+- **The CI quality gate is a main-branch gate.** The Sonar job in both workflows is guarded to run
+  only on a `push` to `main`, precisely because every Community Edition analysis lands on the
+  project's single default branch — running it from a pull request would overwrite the dashboard
+  with code that is not on `main`. Treat it as the post-merge check that the trunk is still
+  healthy, not as something that can block your PR the way a decorated gate would.
 - **The local gate is where Sonar actually protects you.** `/qa`, `/quality-gate`, `/pre-push`,
   and the `sonar-pre-push.sh` hook all run before anything leaves your machine. `sonar-pre-push.sh`
   fails closed — an unreachable or unconfigured server counts as "not passed" — so the enforcement
@@ -300,9 +308,9 @@ variables locally, repository variables and secrets in CI. Never committed.
 ## Worked example: adding `ownerEmail` to `Item`
 
 One small, realistic change followed through all five stages. It is deliberately unglamorous: an
-optional `ownerEmail` on the sample `Item`. It touches the contract, the schema, the domain, the
-application layer, the controller, and the published OpenAPI document — every layer, in the order
-they have to move in, which is exactly why it is a good first exercise.
+optional `ownerEmail` on the sample `Item`, shown in the list and editable on the form. It touches
+the contract, the schema, the domain, the API, the generated types, the UI, and a journey — which
+is exactly why it is a good first exercise.
 
 Every command below is real, and every path exists in this repository.
 
@@ -317,7 +325,7 @@ Every command below is real, and every path exists in this repository.
 spec file itself
 
 Write down the problem, the acceptance criteria as Given/When/Then, the API contract, the data
-model change, the test plan, and — explicitly — what is out of scope. Use
+model change, the UI states, the test plan, and — explicitly — what is out of scope. Use
 [the template](specs/TEMPLATE.md); keep every heading, and write "None" where a section genuinely
 does not apply so a reader can tell *considered and empty* from *forgotten*.
 
@@ -355,8 +363,8 @@ carry the decisions:
 **Today:** an item records no point of contact, so when a question arises about one there is no
 way to tell from the record who to ask.
 
-**Success looks like:** any item can carry an optional owner email address, returned on read and
-settable on create and update.
+**Success looks like:** any item can carry an optional owner email address, visible in the list
+and editable on the form.
 
 ## 2. Acceptance criteria
 
@@ -366,7 +374,7 @@ settable on create and update.
 | AC-2 | **Given** an existing item **When** an editor saves it with `ownerEmail` omitted or blank **Then** the API returns `200` and the stored value is `null` |
 | AC-3 | **Given** any item **When** a request sends `ownerEmail` that is not a valid address **Then** the API returns `400` with code `VALIDATION_ERROR` and no state changes |
 | AC-4 | **Given** an item edited by someone else since it was read **When** an editor saves with a stale `rowVersion` **Then** the API returns `409` with code `CONFLICT` and `ownerEmail` is unchanged |
-| AC-5 | **Given** a caller with only `ReadAccess` **When** they `PUT` an item **Then** the API returns `403` with code `FORBIDDEN` and `ownerEmail` is unchanged |
+| AC-5 | **Given** a viewer **When** they open the item list **Then** the owner email column is visible and no edit control is offered |
 
 ## 3. API contract
 
@@ -408,7 +416,7 @@ logged, and it does not appear in any audit payload.
 
 ## 7. Out of scope
 
-- Filtering or searching by owner email.
+- Filtering or searching the list by owner email.
 - Notifying the owner of anything.
 - Validating that the address belongs to a real directory user.
 ```
@@ -436,7 +444,7 @@ Two rules it enforces:
 
 And one ordering, which is the order that keeps the tree green at every step:
 
-> **Contracts & DTOs → Domain → Migrations → Application → API → integration tests**
+> **Contracts & DTOs → Migrations → Domain → Application → API → Frontend data-access → UI → E2E**
 
 Anything that cannot be placed in that order is a signal the spec is incomplete.
 
@@ -454,31 +462,45 @@ You type:
 /task docs/specs/2026-08-11-item-owner-email.md
 ```
 
-You get back five tasks in the prescribed order. Every path is written in full, relative to the
+You get back eight tasks in the prescribed order. Every path is written in full, relative to the
 repository root, so it can be copied straight into an editor:
 
 **1 · Add `OwnerEmail` to the item DTOs** — depends on nothing.
-`src/AjBoilerplate.Contracts/Items/ItemContracts.cs`
-→ `dotnet build AjBoilerplate.slnx -warnaserror`
+`./src/AjBoilerplate.Contracts/Items/ItemContracts.cs`
+→ `dotnet build ./AjBoilerplate.slnx -warnaserror`
 
 **2 · Add the `AddItemOwnerEmail` migration** — depends on task 3.
-`src/AjBoilerplate.Infrastructure/Persistence/Configurations/ItemConfiguration.cs`,
-plus a new file under `src/AjBoilerplate.Infrastructure/Persistence/Migrations/`
-→ `dotnet test tests/AjBoilerplate.IntegrationTests`
+`./src/AjBoilerplate.Infrastructure/Persistence/Configurations/ItemConfiguration.cs`,
+plus a new file under `./src/AjBoilerplate.Infrastructure/Persistence/Migrations/`
+→ `dotnet test ./tests/AjBoilerplate.IntegrationTests`
 
 **3 · Carry `OwnerEmail` on the `Item` entity, normalised and bounded** — depends on nothing.
-`src/AjBoilerplate.Domain/Items/Item.cs`
-→ `dotnet test tests/AjBoilerplate.UnitTests --filter "FullyQualifiedName~ItemTests"`
+`./src/AjBoilerplate.Domain/Items/Item.cs`
+→ `dotnet test ./tests/AjBoilerplate.UnitTests --filter "FullyQualifiedName~ItemTests"`
 
 **4 · Thread `OwnerEmail` through the commands, service, and validators** — depends on task 3.
-`src/AjBoilerplate.Application/Items/ItemModels.cs`,
-`src/AjBoilerplate.Application/Items/ItemService.cs`,
-`src/AjBoilerplate.Application/Items/ItemValidators.cs`
-→ `dotnet test tests/AjBoilerplate.UnitTests --filter "FullyQualifiedName~Items"`
+`./src/AjBoilerplate.Application/Items/ItemModels.cs`,
+`./src/AjBoilerplate.Application/Items/ItemService.cs`,
+`./src/AjBoilerplate.Application/Items/ItemValidators.cs`
+→ `dotnet test ./tests/AjBoilerplate.UnitTests --filter "FullyQualifiedName~Items"`
 
 **5 · Map `OwnerEmail` in the controller and document it in OpenAPI** — depends on tasks 1 and 4.
-`src/AjBoilerplate.Api/Controllers/ItemsController.cs`
-→ `dotnet test tests/AjBoilerplate.IntegrationTests --filter "FullyQualifiedName~ItemsApiTests"`
+`./src/AjBoilerplate.Api/Controllers/ItemsController.cs`
+→ `dotnet test ./tests/AjBoilerplate.IntegrationTests --filter "FullyQualifiedName~ItemsApiTests"`
+
+**6 · Regenerate the API types and extend the typed service** — depends on task 5.
+`src/frontend/libs/data-access/api-types/src/lib/generated.ts` (generated),
+`src/frontend/libs/data-access/api-client/src/lib/items-api.service.ts`
+→ `cd src/frontend && npm run typecheck`
+
+**7 · Show and edit the field in the item list and form** — depends on task 6.
+`src/frontend/libs/feature-items/src/lib/item-list-page/`,
+`src/frontend/libs/feature-items/src/lib/item-form-page/`
+→ `cd src/frontend && npx nx test feature-items`
+
+**8 · Extend the CRUD journey to cover the new field** — depends on task 7.
+`src/frontend/apps/web-e2e/src/journeys/items-crud.spec.ts`
+→ `cd src/frontend && npx nx run web-e2e:e2e`
 
 Note tasks 1 and 3 have no dependencies, so they can run in parallel. Note also that the migration
 (2) depends on the domain change (3) rather than the other way round: **the migration is generated
@@ -516,7 +538,7 @@ Take **task 3**, the domain change. Start a fresh session:
 ```
 
 **First, the failing test.** The agent adds to
-`tests/AjBoilerplate.UnitTests/Items/ItemTests.cs`:
+`./tests/AjBoilerplate.UnitTests/Items/ItemTests.cs`:
 
 ```csharp
 [Fact]
@@ -542,7 +564,7 @@ placeholder allowance (`example.com`), so it passes silently. `run-affected-test
 and runs the unit project:
 
 ```
-$ dotnet test tests/AjBoilerplate.UnitTests --filter "FullyQualifiedName~ItemTests"
+$ dotnet test ./tests/AjBoilerplate.UnitTests --filter "FullyQualifiedName~ItemTests"
 
 error CS1501: No overload for method 'Create' takes 6 arguments
 ```
@@ -550,7 +572,7 @@ error CS1501: No overload for method 'Create' takes 6 arguments
 Good — it fails, and it fails for the right reason. This is the state a hook must not cancel,
 which is exactly why `run-affected-tests.sh` exits 1 rather than 2.
 
-**Then the implementation.** `src/AjBoilerplate.Domain/Items/Item.cs` gains the
+**Then the implementation.** `./src/AjBoilerplate.Domain/Items/Item.cs` gains the
 constant, the property, the factory parameter, and the normaliser — with the invariant inside the
 entity, where it belongs:
 
@@ -577,16 +599,16 @@ private static string? NormalizeOwnerEmail(string? ownerEmail)
 }
 ```
 
-Run it again. `ItemTests` ships with 16 facts, so the two you just added take it to 18:
+Run it again. `ItemTests` ships with 15 facts, so the two you just added take it to 17:
 
 ```
-$ dotnet test tests/AjBoilerplate.UnitTests --filter "FullyQualifiedName~ItemTests"
+$ dotnet test ./tests/AjBoilerplate.UnitTests --filter "FullyQualifiedName~ItemTests"
 
-Passed!  - Failed: 0, Passed: 18, Skipped: 0, Total: 18
+Passed!  - Failed: 0, Passed: 17, Skipped: 0, Total: 17
 ```
 
 **Then task 2, the migration.** The model changed first, so now the migration can be generated
-from it. From the repository root:
+from it. From `.`:
 
 ```bash
 dotnet ef migrations add AddItemOwnerEmail \
@@ -617,16 +639,16 @@ Two things the harness will stop you doing here, deterministically:
 - Reaching for `TRUNCATE` or `DROP TABLE` to reset your local database — `block-dangerous.sh`
   blocks both, with no bypass.
 
-**Then task 5, the controller and the contract.** Map the new field, annotate it, then read what
-the API actually publishes:
+**Then task 6, the contract sync.** With the API running:
 
 ```bash
-dotnet run --project src/AjBoilerplate.Api &
-curl -s http://localhost:5080/swagger/v1/swagger.json | python3 -m json.tool > /tmp/openapi.json
+cd src/frontend
+npm run generate:api
 ```
 
-The diff in that document is the review signal that a contract moved. If it is wrong, the
-annotation on the server is wrong — never describe the endpoint anywhere else instead.
+That rewrites `libs/data-access/api-types/src/lib/generated.ts` from the committed `docs/api/openapi.json` (regenerate that first with `./scripts/generate-openapi.sh`). The
+diff in that file is the review signal that a contract moved. Never hand-edit it; if the output is
+wrong, the annotation on the server is wrong.
 
 Commit after each task. `git commit` is on the **`allow`** list, so it does not prompt —
 committing is routine, publishing is not.
@@ -642,10 +664,10 @@ committing is routine, publishing is not.
 Run the full gate locally before asking anyone else to look at the work:
 
 - Build with warnings as errors — a warning is a failure.
-- `dotnet format --verify-no-changes`.
+- `dotnet format --verify-no-changes`, ESLint, Prettier.
 - Unit, integration, and architecture tests.
-- Known-vulnerable packages, direct and transitive.
 - The quality gate: zero new Blocker, Critical, or Major findings; ≥80% coverage on new code.
+- Playwright, if a user journey changed.
 
 Paste the evidence into the pull request. "It works" is not evidence; the command output is.
 
@@ -655,22 +677,27 @@ If the gate is red, it is not "nearly done". It is not done.
 
 ### Worked example — Stage 4
 
-You type `/qa`. It runs the build, the format check, the tests, the secret scan, then Sonar, and
+You type `/qa`. It runs the backend, then the frontend, then the secret scan, then Sonar, and
 prints each step's **real** result rather than a summary of what it expected. By hand, the same
 sequence is:
 
 ```bash
-# --- build and format ----------------------------------------------------
-dotnet build  AjBoilerplate.slnx -warnaserror
-dotnet format AjBoilerplate.slnx --verify-no-changes
+# --- backend -------------------------------------------------------------
+dotnet build  ./AjBoilerplate.slnx -warnaserror
+dotnet format ./AjBoilerplate.slnx --verify-no-changes
+dotnet test   ./tests/AjBoilerplate.UnitTests
+dotnet test   ./tests/AjBoilerplate.ArchitectureTests
+dotnet test   ./tests/AjBoilerplate.IntegrationTests    # needs Docker
+dotnet list   ./AjBoilerplate.slnx package --vulnerable --include-transitive
 
-# --- tests ---------------------------------------------------------------
-dotnet test   tests/AjBoilerplate.UnitTests
-dotnet test   tests/AjBoilerplate.ArchitectureTests
-dotnet test   tests/AjBoilerplate.IntegrationTests    # needs Docker
-
-# --- dependencies --------------------------------------------------------
-dotnet list   AjBoilerplate.slnx package --vulnerable --include-transitive
+# --- frontend ------------------------------------------------------------
+cd src/frontend
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+npx nx run web-e2e:e2e            # a journey changed, so this runs
+npm audit --audit-level=high
 
 # --- secrets -------------------------------------------------------------
 gitleaks detect --no-banner --redact
@@ -685,11 +712,13 @@ Build succeeded.
     0 Warning(s)
     0 Error(s)
 
-Passed!  - Failed: 0, Passed: 114, Skipped: 0, Total: 114   (UnitTests)
-Passed!  - Failed: 0, Passed:   9, Skipped: 0, Total:   9   (ArchitectureTests)
-Passed!  - Failed: 0, Passed:  33, Skipped: 0, Total:  33   (IntegrationTests)
+Passed!  - Failed: 0, Passed: 88, Skipped: 0, Total: 88   (UnitTests)
+Passed!  - Failed: 0, Passed:  9, Skipped: 0, Total:  9   (ArchitectureTests)
+Passed!  - Failed: 0, Passed: 29, Skipped: 0, Total: 29   (IntegrationTests)
 
-no leaks found                                              (Gitleaks)
+  6 passed                                                (Playwright: 2 journey + 4 accessibility)
+
+no leaks found                                            (Gitleaks)
 ```
 
 Those nine architecture tests are the six dependency rules plus the three controller conventions —
@@ -710,7 +739,7 @@ Coverage on new code: 91.4%
 Readiness: green — push requires your explicit approval.
 ```
 
-Remember what that gate is and is not: with **Community Build** there is no branch analysis, so
+Remember what that gate is and is not: with **Community Edition** there is no branch analysis, so
 this reads the project's main-branch analysis. The local run is where it protects you. If you now
 try to push before that gate is green, `sonar-pre-push.sh` blocks the `git push` outright:
 
@@ -735,8 +764,8 @@ not evaluate" is not "passed".
 `/review` first: it reads `git diff` and `git diff --staged` — the diff, not its memory of what it
 intended to write — checks the change against the spec, walks the checklist in
 `.claude/workflows/code-review.md`, and cross-checks the standards for access control and OWASP,
-API contract and versioning, middleware order, error handling, EF Core and migrations, and test
-coverage of every new behaviour, error path, and authorization rule. It
+API contract and versioning, middleware order, error handling, EF Core and migrations, the
+frontend rules, and test coverage of every new behaviour, error path, and authorization rule. It
 outputs prioritised findings with `file:line`, each marked **blocker** or **nit**. Fix what it
 finds before a human spends time on it.
 
@@ -758,18 +787,17 @@ critical or major findings.
 You type `/review`. On this change it might come back with:
 
 ```
-BLOCKER  src/AjBoilerplate.Application/Items/ItemValidators.cs:41
+BLOCKER  ./src/AjBoilerplate.Application/Items/ItemValidators.cs:41
          UpdateItemCommandValidator has no rule for OwnerEmail. AC-3 requires a 400 with
          VALIDATION_ERROR for a malformed address; today it reaches the domain and either
          persists or surfaces as a 500. Add an EmailAddress rule bounded by
          Item.MaxOwnerEmailLength, and a unit test per AC-3.
 
-BLOCKER  src/AjBoilerplate.Api/Controllers/ItemsController.cs:112
-         OwnerEmail is read from UpdateItemRequest but never passed to UpdateItemCommand, so
-         an edit silently discards the field. Covered by no test — AC-1 has no integration
-         assertion.
+BLOCKER  src/frontend/libs/feature-items/src/lib/item-form-page/item-form-page.ts:78
+         The ownerEmail control is not included in the UpdateItemRequest body, so an edit
+         silently discards the field. Covered by no test — AC-1 has no frontend assertion.
 
-NIT      src/AjBoilerplate.Domain/Items/Item.cs:31
+NIT      ./src/AjBoilerplate.Domain/Items/Item.cs:31
          MaxOwnerEmailLength is documented as "the RFC 5321 limit" — worth naming the RFC in
          the spec too, so the number is traceable rather than folkloric.
 ```
@@ -778,15 +806,17 @@ You fix the two blockers, re-run `/qa`, and open the pull request. The body foll
 `.claude/templates/pull-request.md`, which is a checklist rather than a narrative:
 
 - **Summary** — what changed and why, linking `docs/specs/2026-08-11-item-owner-email.md`
-- **Changes** — the layers touched and the migration added; docs and infra
+- **Changes** — backend layers touched and the migration added; frontend libraries and whether
+  types were regenerated; docs and infra
 - **Quality gate** — a checkbox per command, with the pasted output: build clean with warnings as
-  errors, `dotnet format` clean, `dotnet test` green across all three suites, no vulnerable
-  packages, SonarQube at zero Blocker/Critical/Major with ≥80% coverage on new code, Gitleaks
-  clean, migration reviewed
-- **Architecture & standards** — the layer dependency rule respected; no entity on the wire; no
-  `EnsureCreated`, no manual DDL, no `DateTime.UtcNow`
-- **API contract** — versioned route, envelope with `traceId`, correct status codes, every status
-  code annotated so the OpenAPI document is complete
+  errors, `dotnet format` clean, `dotnet test` green across all three suites, the frontend targets
+  clean, Playwright green and axe clean on changed screens, SonarQube at zero
+  Blocker/Critical/Major with ≥80% coverage on new code, Gitleaks clean, migration reviewed
+- **Architecture & standards** — Clean Architecture and Nx boundaries respected; standalone +
+  OnPush + signals + `inject()`; PrimeNG only; no hand-written HTTP client or duplicated DTO; no
+  `any`, no `EnsureCreated`, no manual DDL
+- **API contract** — versioned route, envelope with `traceId`, correct status codes, OpenAPI
+  documented and frontend types regenerated
 - **Security** — deny-by-default policy, ownership validated after load, restricted fields removed
   by DTO projection, no secrets or real identifiers
 - **Notes / risks** — what a reviewer should look at hardest
@@ -835,8 +865,8 @@ context that produced it is gone. Stay present, review at each task boundary.
 
 A reviewer's attention is finite and measurable, and it falls off a cliff well before a
 thousand-line diff. Above roughly 400 changed lines, review quality degrades into
-pattern-matching. Split the work. Generated files (EF Core migrations) are excluded from the
-count — but they are still reviewed.
+pattern-matching. Split the work. Generated files (`api-types`, migrations) are excluded from
+the count — but they are still reviewed.
 
 ### The prompting developer owns the code
 
@@ -860,7 +890,8 @@ finding as an incident rather than a warning: the value already reached a file.
 ### Documentation moves with the change
 
 If a convention changed, `CLAUDE.md` changes in the same pull request. If a decision was made, an
-ADR lands with it. If a contract changed, the OpenAPI document and `docs/api/` change with it. Documentation that lags is documentation that misleads. `session-handoff.sh` flags this
+ADR lands with it. If a contract changed, the OpenAPI document and the generated types change
+with it. Documentation that lags is documentation that misleads. `session-handoff.sh` flags this
 drift at the end of every session — do not ignore its report.
 
 ### Improve the harness, not just the code
@@ -882,6 +913,7 @@ advisory, a hook is deterministic.
 | `/task` | 2 | Break an approved spec into ≤half-day, independently-mergeable tasks |
 | `/implement` | 3 | Implement one task, test-first, on a branch |
 | `/new-migration` | 3 | Create an EF Core migration, review it by hand, then apply and script it |
+| `/sync` | 3 | Regenerate API types from OpenAPI and check for duplicated DTOs and unversioned calls |
 | `/qa` | 4 | The full local gate |
 | `/quality-gate` | 4 | Static analysis only, enforcing zero Blocker/Critical/Major |
 | `/pre-push` | 4 | The gate plus a readiness report — never pushes |

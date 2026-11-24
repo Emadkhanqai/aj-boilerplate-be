@@ -10,21 +10,36 @@ true even after the decision is reversed, because it describes a moment.
 |---|---|---|
 | [0001](0001-layered-clean-architecture.md) | Layered Clean Architecture, not vertical slices | Accepted |
 | [0002](0002-dual-cloud-provider-behind-one-switch.md) | Two cloud providers behind a single `CLOUD_PROVIDER` switch | Accepted |
+| [0003](0003-primeng-as-sole-component-library.md) | PrimeNG is the only component library | Accepted |
+| [0004](0004-openapi-generated-frontend-types.md) | Frontend API types are generated from OpenAPI | Accepted |
 | [0005](0005-apiresponse-envelope-and-status-code-contract.md) | Uniform `ApiResponse<T>` envelope and status-code contract | Accepted |
 | [0006](0006-three-repository-split.md) | Publish as three repositories derived from one tree | Accepted |
+| [0007](0007-bespoke-whats-new-modal.md) | The "What's new" modal is bespoke markup, a bounded exception to PrimeNG-only | Accepted |
 | [0008](0008-no-audit-trail-or-soft-delete.md) | No audit trail and no soft delete — the ingredients ship, the policy does not | Accepted |
 | [0009](0009-idempotency-keys-for-unsafe-requests.md) | `Idempotency-Key` is opt-in, POST-only, and replays a buffered response from a unique-indexed table | Accepted |
+| [0010](0010-partial-rtl-without-an-i18n-library.md) | Direction switching without an i18n library — partial RTL, deliberately | Accepted |
 | [0011](0011-scripted-one-way-derivation-for-the-three-repositories.md) | Derivation of the single-stack repositories is a committed one-way script | Accepted |
+| [0012](0012-gateway-session-auth.md) | Sign-in is a gateway session, not a browser token (supersedes the identity part of 0002) | Accepted |
 
-**The gaps at 0003, 0004, 0007, and 0010 are intentional — nothing is missing.** Those four
-decisions are about the client, so they ship in
-[`aj-boilerplate-fe`](https://github.com/Emadkhanqai/aj-boilerplate-fe) and in the full-stack
-repository, and there is nothing here for them to describe. The numbers are deliberately not
-reused, so a reference to "ADR-0004" means the same document in every one of the three
-repositories. See [ADR-0006](0006-three-repository-split.md).
+These twelve record the decisions taken when this boilerplate was built. They are the canonical
+series of `aj-boilerplate-fs`, and **the next free number is `0013`**. If you cloned this to start a
+project, either keep them as history and continue at `0013`, or delete them and start your own
+series at `0001` — but pick one and be consistent.
 
-These record the decisions taken when this boilerplate was built. Keep them as history and start
-your own series at `0012`, or delete them and start at `0001` — but pick one and be consistent.
+**Numbers are never reused or renumbered.** Renumbering an ADR after the fact breaks every
+cross-reference that already points at it, and a gap in a sequence is cheaper than a number that
+means two different things in two repositories. If a number is claimed and the ADR is then
+abandoned, leave the gap and say so here.
+
+Four pairs are worth reading together:
+
+- **`0003` and `0007`** — `0007` bounds `0003` rather than superseding it. It is the one place the
+  PrimeNG rule bends, and it says exactly how far.
+- **`0006` and `0011`** — `0006` decided to publish three repositories and named the drift risk;
+  `0011` is the mechanism, written after the drift it predicted had already happened.
+- **`0001` and `0008`** — `0008` is what the layering in `0001` deliberately does *not* buy you.
+- **`0002` and `0012`** — `0012` supersedes the identity half of `0002` and leaves the secrets half
+  standing. `0002` carries a note at its top saying so; its body is unchanged.
 
 ## Writing one
 

@@ -1,6 +1,6 @@
 ---
 name: test-engineer
-description: Writes and maintains unit, integration, and architecture tests, ensuring the spec's rules are provably covered.
+description: Writes and maintains unit, integration, and architecture tests (backend) plus component, E2E, and accessibility tests (frontend), ensuring the spec's rules are provably covered.
 ---
 
 # Agent: Test Engineer
@@ -10,11 +10,12 @@ a result.
 
 ## Scope
 
-- `AjBoilerplate.UnitTests` — domain and application logic, no I/O.
-- `AjBoilerplate.IntegrationTests` — the real request path against a real SQL Server started by
-  Testcontainers with the migrations applied.
-- `AjBoilerplate.ArchitectureTests` — the Clean Architecture boundaries and the controller
-  conventions.
+- **Backend:** `AjBoilerplate.UnitTests` (domain/application, no I/O),
+  `AjBoilerplate.IntegrationTests` (Application + Infrastructure against a real SQL Server with
+  migrations applied), `AjBoilerplate.ArchitectureTests` (Clean Architecture boundaries).
+- **Frontend:** Vitest for services, signals, and component logic; Playwright
+  (`apps/web-e2e`) for user journeys; axe-core for accessibility; type-checking as part of the
+  test surface.
 
 ## What must be covered
 
@@ -27,8 +28,7 @@ Derive the list from the spec in `docs/specs/` — not from intuition. For every
 - **Each state transition**, including the illegal transitions that must be rejected.
 - **Each distinct error path** — every status code and `code` value the endpoint can return.
 - **Optimistic concurrency** — a stale `If-Match` / `rowversion` yields `409`.
-- **Each new endpoint** — an integration test through the real pipeline, including the
-  envelope shape and the `traceId`.
+- **Each new route** — at least one Playwright journey and a clean axe-core run.
 
 ## Rules
 
@@ -44,4 +44,4 @@ Derive the list from the spec in `docs/specs/` — not from intuition. For every
 
 ## Related
 
-[`../standards/testing.md`](../standards/testing.md) · [`../standards/clean-architecture.md`](../standards/clean-architecture.md)
+[`../standards/testing.md`](../standards/testing.md) · [`../standards/clean-architecture.md`](../standards/clean-architecture.md) · [`../standards/angular.md`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/.claude/standards/angular.md)

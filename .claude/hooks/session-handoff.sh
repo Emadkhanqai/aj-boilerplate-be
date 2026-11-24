@@ -93,25 +93,28 @@ flag() { FLAGS="${FLAGS}
 
 # Conventions changed but CLAUDE.md did not.
 if { has '\.claude/standards/' || has 'Program\.cs$' || has '/Middleware/' \
-     || has '\.editorconfig$' || has 'Directory\.Build\.props$'; } \
-   && ! has 'CLAUDE\.md$'; then
+     || has '\.editorconfig$' || has 'Directory\.Build\.props$' \
+     || has 'eslint\.config' || has 'nx\.json$'; } && ! has 'CLAUDE\.md$'; then
   flag "**CLAUDE.md may be stale** — conventions, standards, or build configuration changed, but no \`CLAUDE.md\` was updated."
 fi
 
-# API surface changed but the published OpenAPI snapshot did not.
+# API surface changed but the OpenAPI snapshot / generated types did not.
 if { has '/Controllers/' || has '/Contracts/' || has 'Controller\.cs$'; } \
    && ! has '^docs/api/'; then
-  flag "**OpenAPI snapshot may be stale** — controllers or contracts changed, but nothing under \`docs/api/\` was updated. Consumers generate their clients from that document."
+  flag "**OpenAPI snapshot may be stale** — controllers or contracts changed, but nothing under \`docs/api/\` was updated. Run \`/sync\`."
+fi
+if { has '/Controllers/' || has '/Contracts/'; } && ! has 'api-types'; then
+  flag "**Generated frontend types may be stale** — the API surface changed but \`libs/data-access/api-types\` was not regenerated. Run \`/sync\`."
 fi
 
 # Architectural change with no ADR.
 if { has '/Migrations/' || has 'DbContext' || has 'CloudProvider' \
-     || has '\.csproj$'; } && ! has '^docs/adr/'; then
+     || has 'package\.json$' || has '\.csproj$'; } && ! has '^docs/adr/'; then
   flag "**ADR may be missing** — a schema, dependency, or platform change landed without a decision record in \`docs/adr/\`."
 fi
 
 # Tests.
-if has '\.cs$' && ! has '[Tt]ests?/' && ! has 'Tests\.cs$'; then
+if { has '\.cs$' || has '\.ts$'; } && ! has '[Tt]ests?/' && ! has '\.spec\.ts$' && ! has 'Tests\.cs$'; then
   flag "**No test files changed** — confirm the new behaviour is actually covered."
 fi
 

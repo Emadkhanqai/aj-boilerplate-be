@@ -9,7 +9,7 @@ Run the full pre-push quality gate and report. **This command never pushes.**
 ## Do this, in order (stop and fix on the first hard failure)
 
 1. `git status` and `git diff --stat` — the tree is committed and the change is understood.
-2. Run [`/qa`](qa.md) — build, format, test, dependency audit, secret scan.
+2. Run [`/qa`](qa.md) — build, format, test, lint, typecheck, dependency audit, secret scan.
 3. Run the **SonarQube scanner** and read the results via the SonarQube MCP:
    `get_project_quality_gate_status`, then `search_sonar_issues_in_projects` filtered to
    `BLOCKER,CRITICAL,MAJOR`, then `search_security_hotspots`.
@@ -28,8 +28,9 @@ Run the full pre-push quality gate and report. **This command never pushes.**
 
 ## Report
 
-Print the real output for: git status, build, format, tests, dependency audit, secret scan,
-and the SonarQube gate status with the open Blocker/Critical/Major count. Then list the remaining risks and suggest a commit message.
+Print the real output for: git status, build, format, tests, frontend lint/typecheck/test/
+build, dependency audit, secret scan, and the SonarQube gate status with the open
+Blocker/Critical/Major count. Then list the remaining risks and suggest a commit message.
 
 **Then ask for explicit push approval** — and do not push. See
 [`../standards/git-approval-policy.md`](../standards/git-approval-policy.md).

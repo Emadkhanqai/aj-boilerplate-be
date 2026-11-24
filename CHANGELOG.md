@@ -70,6 +70,126 @@ Nothing yet.
 
 ---
 
+## [1.0.0] — 2026-11-24
+
+**A major release, because sign-in was replaced and configuration keys changed.** Derived from
+`aj-boilerplate-fs` v1.0.0 (`1e96e51`). If you cloned 0.1.x of this repository and kept its
+authentication, you cannot take this release by merging; read
+[Upgrade steps from 0.1.x](#upgrade-steps-from-01x) first.
+
+The short version: **the API only ever sees Keycloak JWTs, and sign-in is a server-side flow run by a new
+Auth service.** The reasoning is in [ADR-0012](docs/adr/0012-gateway-session-auth.md) and the model is
+in [docs/auth/](docs/auth/README.md).
+
+### Breaking changes
+
+- **API: direct cloud tokens are no longer accepted.** The `Authentication:GoogleCloudIdentity:*` and
+  `Authentication:EntraId:*` schemes are removed, together with `Keycloak:Realm` and
+  `Keycloak:ClientSecret`, which nothing read. The API validates only Keycloak JWTs whose `azp` equals
+  `Keycloak:ClientId`. *If you ignore this:* a bearer token from Google or Entra is rejected with 401,
+  and the removed keys are silently ignored.
+- **API: new start-up refusals outside Development.** A plaintext `Keycloak:JwksUri` stops the API
+  unless you set the new `Keycloak:AllowInsecureJwksTransport=true`; an empty `JwksUri` stops it unless
+  `Keycloak:AllowDiscoveryFallback=true`; an `Auth:Mode` other than `gateway` stops it.
+- **API: deny by default.** A fallback policy requires an authenticated caller on every endpoint that
+  declares nothing. The three health endpoints opt out with `AllowAnonymous`. An endpoint you added
+  outside a controller answers 401 until you decide its policy.
+- **API: policies are "a seat OR a permission".** `ReadAccess`, `WriteAccess` and `AdminAccess` are
+  satisfied by the role hierarchy or by `items:read`, `items:write` or `admin:manage`. A role key the
+  application does not recognise is dropped and logged once, never granted.
+- **API: the rate limiter runs after authentication** and partitions on the user's subject. Before,
+  every caller behind a gateway shared one bucket keyed by the proxy's address.
+- **`CLOUD_PROVIDER` no longer selects an identity issuer.** It selects the secrets provider and the
+  `infra/` tree. [ADR-0002](docs/adr/0002-dual-cloud-provider-behind-one-switch.md)'s identity half is
+  superseded by ADR-0012 (a note sits at its top; its body is unchanged).
+- **New database objects.** The app database gets an `AuthenticationEvents` table (migration
+  `AddAuthenticationEvents`, then `AddSessionEndAndDisplayName`, which adds the nullable end columns), and the
+  Auth service needs its own database with schema `auth`, applied by its own migrations (the last,
+  `AddHandoffAndSessionEndedOutbox`, is additive). None runs at start-up.
+- **`.env.example` was rewritten.** The old `OIDC_*` and `Authentication__*` entries are gone; the file
+  now carries the API's Keycloak keys and the Auth service's keys, and `Keycloak__*` is no longer
+  missing. Compare it with your `.env`.
+- **`docs/` is the full-stack documentation, identical to `aj-boilerplate-fs`.** The backend-only
+  rewrites of `architecture.md`, `workflow.md`, `onboarding.md` and the other shared documents from 0.1.x
+  are gone; links into frontend files point at `aj-boilerplate-fs` on GitHub. The `.claude/` harness is
+  the same, minus the frontend agents, standards, templates and commands. ADR numbers are unchanged:
+  this repository already used the full-stack numbering, and ADR-0012 is new.
+
+### Added
+
+- **`AjBoilerplate.Auth`**, a separate ASP.NET Core host: Authorization Code + PKCE sign-in against Entra
+  ID, RFC 8693 token exchange at Keycloak, encrypted sessions in SQL Server with Redis in front, 8 h idle
+  and 12 h absolute lifetimes, single-flight refresh, `/auth/validate`, a roles-version endpoint, a
+  revoked marker, and an admin force-refresh endpoint. `AjBoilerplate.Auth.Tests` and an architecture
+  test that keeps it independent of the layered API.
+- **User administration and sign-in history.** The Auth service gains `/internal/admin/*` (users, groups, members,
+  per-user seats, disable and enable, refresh, over a Keycloak Admin REST client restricted to
+  `Auth:Admin:ManagedGroupPaths`, with a deny-by-default e-mail domain allow-list), `/auth/no-access`,
+  `POST /auth/events` (off until configured), `/auth/handoff` and `/auth/handoff/redeem` (needs `Auth:Portals`) and a
+  transactional outbox that reports each session's end to the API
+  ([contract](docs/auth/session-ended-contract.md)). The API gains `POST /api/integration/auth-backend/session-ended`,
+  `GET /api/v1/admin/authentication-history`, `GET /api/v1/me/portals` and an `/api/v1/admin/*` proxy over the Auth
+  service's admin routes. New keys: `Auth:Admin:*`, `Auth:Portal:SessionEvents:*`, `Auth:Portal:DisplayName`,
+  `Auth:Portals:N:*`, `Auth:Events:*`, `Auth:SessionEndDelivery:*`, `Auth:ForwardedHostHeader`, `AuthService:*`,
+  `Integration:AuthBackend:*` and `Portals:N:*`; all optional, and each surface is off or 404 until configured.
+  `infra/gcp` has optional variables for the Auth service's admin client and session events. *If you ignore this:* nothing
+  changes for you except two new migrations to apply.
+- **`GET /api/v1/me`**, returning roles, capability flags and `permissions`.
+- **API identity layer**: JWKS pre-warm, seats and permissions (`ApplicationRoles`, `Permissions`,
+  `RoleCapabilities`, `SeatOrPermission`), and `SignInRecordingMiddleware`, which records one row per
+  gateway session.
+- **A bundled Keycloak realm** (`infra/keycloak/realm-aj-boilerplate.json`, dev-only secrets) with seeded
+  users `admin`, `editor`, `editor2`, `viewer` and `noaccess` (seats held through the groups `/app/admins`,
+  `/app/editors` and `/app/viewers`) and a dedicated `aj-boilerplate-admin` client for the Auth service's directory
+  admin, for running the API and Auth service against a local Keycloak.
+- **Documentation**: [`docs/auth/`](docs/auth/README.md) (overview, setup, troubleshooting, contract),
+  ADR-0012, and a rewritten `README.md` and `CLAUDE.md`.
+
+### Changed
+
+- Auth service defaults equal the Al Jazeera USP staging Entra values (scopes
+  `openid profile offline_access User.Read`, `RequestOwnClientIdScope=false`, `SubjectIssuer=oidc`).
+  Azure AD B2C stays available by configuration.
+- A patched `System.Security.Cryptography.Pkcs` is pinned. `Microsoft.Data.SqlClient` 6.1.1 pulls a
+  version that now carries two advisories, which fail restore under warnings-as-errors.
+- The comments and XML documentation that still said the cloud switch picks an identity issuer, and the
+  one for `Auth:AllowInsecureUpstreams` (it applies to five upstreams, not one), now say what the code does.
+
+### Removed
+
+- The API's `Authentication:GoogleCloudIdentity` and `Authentication:EntraId` schemes, and
+  `Keycloak:Realm` and `Keycloak:ClientSecret`.
+
+### Not in this release
+
+- **Nothing deploys the Auth service or Keycloak.** `infra/` and `deploy.yml` provision and roll out the
+  API, its database, Redis and secrets only. Projects using their own Auth service deploy it themselves.
+- **This repository's `docker-compose.yml` runs SQL Server, Redis and the API only**, with no Keycloak
+  and no Auth service. The full-stack repository has the one-command sign-in stack.
+- **No real Entra tenant has been exercised.** The full-stack repository's local stack replaces Entra
+  with a second Keycloak client. See [docs/auth/setup.md](docs/auth/setup.md).
+
+### Upgrade steps from 0.1.x
+
+1. **Decide your provider.** Outside USP: you deploy the Auth service. Inside the Al Jazeera USP
+   platform: the shared gateway and auth-backend do the job and **you do not deploy the Auth service**;
+   ask the USP platform team to onboard your host and client
+   ([setup, section 3](docs/auth/setup.md#3-onboarding-into-usp-auth_providerusp)).
+2. **API configuration.** Delete `Authentication__*`, `Keycloak__Realm` and `Keycloak__ClientSecret`. Set
+   `Keycloak__ValidIssuer`, `Keycloak__JwksUri` (https) and `Keycloak__ClientId`. If your Keycloak serves
+   its JWKS over http, decide deliberately about `Keycloak__AllowInsecureJwksTransport`.
+3. **Keycloak.** The portal client needs token exchange, client roles `admin`/`editor`/`viewer` (plus
+   any permissions) and a flat `roles` claim mapper. See [setup, section 2b](docs/auth/setup.md#2b-keycloak).
+4. **Migrations.** Apply the app database's migrations (`AddAuthenticationEvents`, `AddSessionEndAndDisplayName`). Create
+   the Auth database and apply the Auth service's migrations.
+5. **Compose and CI.** Take the new `.env.example`. Add the Auth service image build and deploy to your
+   pipeline; the boilerplate's `deploy.yml` does not.
+6. **ADRs.** Continue your own series at the next free number after `0012`.
+7. Run the gate. Then sign in as a user with a role, as one without, and remove a role in Keycloak to
+   watch the access-revoked dialog appear.
+
+---
+
 ## [0.1.1] — 2026-09-01
 
 A patch release, and every entry in it is the same story: a tree that was green in August

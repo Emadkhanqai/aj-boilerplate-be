@@ -55,7 +55,8 @@ Edition, branch and PR analysis are additive — see the opt-in `SONAR_BRANCH` n
 [`../hooks/sonar-pre-push.sh`](../hooks/sonar-pre-push.sh).
 
 What Community **does** have, and what this gate actually relies on: quality gates and quality
-profiles, the **new code** period on the main branch, the C# analyser, coverage import, security hotspots, and the Web API the pre-push hook queries.
+profiles, the **new code** period on the main branch, the C# / TypeScript / JavaScript / HTML /
+CSS analysers, coverage import, security hotspots, and the Web API the pre-push hook queries.
 
 ### Where the pull-request safety net comes from instead
 
@@ -105,21 +106,25 @@ The project key is resolved in this order: `.sonarlint/connectedMode.json` →
 `sonar-project.properties` → the CI workflow → `search_my_sonarqube_projects` over MCP.
 
 In GitHub Actions the same three arrive as repository **variables** (`SONAR_HOST_URL`,
-`SONAR_PROJECT_KEY`) and one repository **secret** (`SONAR_TOKEN`). The token is a secret; the
-rest are not. The CI job skips itself while `SONAR_HOST_URL` is unset, so a fresh clone is not
-red before you have a server — delete that part of the guard once you do.
+`SONAR_PROJECT_KEY`, `SONAR_PROJECT_KEY_FRONTEND`) and one repository **secret**
+(`SONAR_TOKEN`). The token is a secret; the rest are not. Both CI jobs skip themselves while
+`SONAR_HOST_URL` is unset, so a fresh clone is not red before you have a server — delete that
+part of the guard once you do.
 
-## Running the scanner
+## Running the scanner — two scanners, not one
 
-**This trips people up.** C# is not analysed by the generic `sonar-scanner` CLI: the C#
-analyser only produces findings when the build runs *inside* a SonarScanner for .NET session,
-because it needs the Roslyn compilation.
+**This trips people up.** C# is not analysed by the generic CLI: the C# analyser only produces
+findings when the build runs *inside* a SonarScanner for .NET session, because it needs the
+Roslyn compilation. JavaScript/TypeScript needs no such wrapper and uses the plain CLI.
 
 | Code | Scanner | Install |
 |---|---|---|
 | C# / .NET | `dotnet-sonarscanner` (begin → build → end) | `dotnet tool install --global dotnet-sonarscanner` |
+| TypeScript / JavaScript / HTML / CSS | `sonar-scanner` CLI | [SonarScanner CLI](https://docs.sonarsource.com/sonarqube-community-build/analyzing-source-code/scanners/sonarscanner/), or `SonarSource/sonarqube-scan-action` in CI |
 
-It needs a JVM (Java 17+; the .NET scanner's current versions want Java 21).
+Both need a JVM (Java 17+; the .NET scanner's current versions want Java 21).
+
+### Backend (C#)
 
 ```bash
 dotnet sonarscanner begin \
@@ -134,8 +139,25 @@ dotnet test --collect:"XPlat Code Coverage"
 dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
 ```
 
+### Frontend (TypeScript)
+
+```bash
+npx nx run-many -t test --coverage --coverageReporters=lcov
+
+sonar-scanner \
+  -Dsonar.projectKey="$SONAR_PROJECT_KEY_FRONTEND" \
+  -Dsonar.host.url="$SONAR_HOST_URL" \
+  -Dsonar.token="$SONAR_TOKEN" \
+  -Dsonar.sources=src/frontend \
+  -Dsonar.javascript.lcov.reportPaths=src/frontend/coverage/lcov.info
+```
+
 **No `sonar.branch.name`. No `sonar.pullrequest.*`.** Community rejects them, and even if it
 did not, there is only one branch to analyse. Analysis always targets the default branch.
+
+Use a **separate project key for the frontend**. Two different scanners pushing to one
+Community project would overwrite each other's analysis on every run, and the second one to
+finish would win.
 
 ## Continuous integration
 
@@ -145,8 +167,9 @@ The rule that falls out of "one project, one branch, last analysis wins":
 > build.** A PR-triggered analysis would overwrite `main`'s result with the state of an
 > unmerged branch, leaving the dashboard describing code that is not on `main`.
 
-[`backend-ci.yml`](../../.github/workflows/backend-ci.yml) guards the Sonar job on
-`github.event_name == 'push' && github.ref == 'refs/heads/main'` and says why in a comment.
+Both [`backend-ci.yml`](../../.github/workflows/backend-ci.yml) and
+[`frontend-ci.yml`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/.github/workflows/frontend-ci.yml) guard the Sonar job on
+`github.event_name == 'push' && github.ref == 'refs/heads/main'` and say why in a comment.
 Pull requests are gated by build, format/lint, tests, the coverage threshold, Gitleaks, the
 vulnerable-package audit, and CodeQL — see
 [the safety-net note above](#where-the-pull-request-safety-net-comes-from-instead).

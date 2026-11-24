@@ -21,7 +21,7 @@ The codebase had nothing that closed this. Two things looked like they might, an
   — but it protects an `UPDATE` from a lost update, by refusing a write whose row has moved since it
   was read. A duplicated `CREATE` reads nothing and conflicts with nothing. There is no row to have
   moved. `RowVersion` is silent here, correctly, and the gap is the whole reason for this ADR.
-- **The inbox** (`src/AjBoilerplate.Domain/Messaging/Inbox/InboxMessage.cs`) *is* an
+- **The inbox** (`./src/AjBoilerplate.Domain/Messaging/Inbox/InboxMessage.cs`) *is* an
   at-most-once mechanism, and a good one: it keys on `SourceEventId`, the producer's own event
   identifier, so a redelivered integration event is recognised and not processed twice. But it
   guards the **messaging** edge. Its key comes from the producing system, and it protects a consumer
@@ -32,7 +32,7 @@ inbound *integration events*, keyed by the producer's event id. What was missing
 processing of inbound *HTTP writes*, keyed by a label the calling client chooses. Both come down to
 the same primitive: write a claim row before doing the work, and let a unique index decide who won.
 They share the helper that recognises that race —
-`src/AjBoilerplate.Application/Persistence/SqlUniqueConstraintViolation.cs` — which
+`./src/AjBoilerplate.Application/Persistence/SqlUniqueConstraintViolation.cs` — which
 already existed for the inbox and is deliberately narrow (SQL Server errors 2601 and 2627 only, so
 it never masks an unrelated database failure as a false success).
 
@@ -52,11 +52,11 @@ request executes and its response is stored verbatim; a later request carrying t
 same caller receives that stored response instead of executing again.
 
 The mechanism is:
-`src/AjBoilerplate.Api/Infrastructure/IdempotencyMiddleware.cs`,
-`src/AjBoilerplate.Application/Idempotency/IdempotencyService.cs`,
-`src/AjBoilerplate.Domain/Idempotency/IdempotencyRecord.cs`, and the
+`./src/AjBoilerplate.Api/Infrastructure/IdempotencyMiddleware.cs`,
+`./src/AjBoilerplate.Application/Idempotency/IdempotencyService.cs`,
+`./src/AjBoilerplate.Domain/Idempotency/IdempotencyRecord.cs`, and the
 `IdempotencyRecords` table added by
-`src/AjBoilerplate.Infrastructure/Persistence/Migrations/20260803153248_AddIdempotencyRecords.cs`.
+`./src/AjBoilerplate.Infrastructure/Persistence/Migrations/20260803153248_AddIdempotencyRecords.cs`.
 
 The decisions worth recording, each with what it costs and where it is enforced:
 
@@ -77,7 +77,7 @@ The decisions worth recording, each with what it costs and where it is enforced:
    because the upstream exception handler writes its 500 into whatever stream is current.
 
 3. **Placed after `UseAuthentication`/`UseAuthorization`, before `MapControllers`**
-   (`src/AjBoilerplate.Api/Program.cs`). That ordering is a security property, not a
+   (`./src/AjBoilerplate.Api/Program.cs`). That ordering is a security property, not a
    preference: the key is scoped to the authenticated caller, so the principal must already be
    resolved, and an unauthorized caller must be rejected before it can claim a key or read back a
    stored response. It sits before `MapControllers` because it has to wrap the endpoint that
@@ -126,7 +126,7 @@ The decisions worth recording, each with what it costs and where it is enforced:
    exists to support it and `Idempotency:RetentionHours` (default 24) states the intended window, but
    nothing in the application enforces either. A boilerplate should not impose a scheduler on a
    consuming project whose deployment shape it does not know. The `DELETE` is written out in
-   `README.md` under "Idempotency keys".
+   `./README.md` under "Idempotency keys".
 
 10. **`MaxKeyLength = 128` is stated twice**, once as `IdempotencyRecord.MaxKeyLength` and once as
     `IdempotencyMiddleware.MaxKeyLength`, because the Api layer genuinely cannot reach the Domain
@@ -286,7 +286,7 @@ died between sending the request and recording that it had sent it.
 ## Verification
 
 The guarantee is asserted, not asserted-to. All of these run against a containerised SQL Server
-(`tests/AjBoilerplate.IntegrationTests/Api/IdempotencyApiTests.cs`), which is the only
+(`./tests/AjBoilerplate.IntegrationTests/Api/IdempotencyApiTests.cs`), which is the only
 honest way to test a mechanism whose correctness rests on a unique index:
 
 - **`Concurrent_requests_sharing_a_key_create_exactly_one_record`** — the case the whole thing exists
@@ -308,7 +308,7 @@ honest way to test a mechanism whose correctness rests on a unique index:
 - **`IdempotencyKeyLimitTests`** pins the duplicated `MaxKeyLength` constant across the Api and Domain
   assemblies; it fails the build if either moves alone.
 - Decision logic in isolation:
-  `tests/AjBoilerplate.UnitTests/Idempotency/IdempotencyServiceTests.cs`, including that
+  `./tests/AjBoilerplate.UnitTests/Idempotency/IdempotencyServiceTests.cs`, including that
   abandoning never drops a stored response and that a mismatched request is refused even while the
   original is still running.
 
@@ -332,9 +332,9 @@ rather than a quiet extension:
   prohibition that forces the duplicated constant and the primitives-only service interface
 - [ADR-0005: `ApiResponse` envelope and status-code contract](0005-apiresponse-envelope-and-status-code-contract.md)
   — why the replayed artefact must be the serialised envelope, and where `409`/`400` come from
-- `README.md` § "Idempotency keys" — the client-facing behaviour table and the retention
+- `./README.md` § "Idempotency keys" — the client-facing behaviour table and the retention
   `DELETE`
 - `docs/architecture.md` § "Outbox and inbox" — the inbound-event dedup this mirrors at the messaging
   edge
-- `src/AjBoilerplate.Application/Persistence/SqlUniqueConstraintViolation.cs` — the shared
+- `./src/AjBoilerplate.Application/Persistence/SqlUniqueConstraintViolation.cs` — the shared
   race-detection helper (SQL Server 2601 / 2627)

@@ -16,6 +16,7 @@ migration is generated *from* the model — never hand-authored to lead it.
 ## 2. Add the migration
 
 ```bash
+cd .
 dotnet ef migrations add <PascalCaseName> \
   --project src/AjBoilerplate.Infrastructure \
   --startup-project src/AjBoilerplate.Api \

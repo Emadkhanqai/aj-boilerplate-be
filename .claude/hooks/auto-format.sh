@@ -2,10 +2,8 @@
 # auto-format.sh — PostToolUse(Edit|Write)
 #
 # Formats ONLY the file that was just edited.
-#   .cs  -> dotnet format, scoped to the nearest .csproj
-#
-# Nothing else is formatted: this repository is a .NET solution, and .editorconfig
-# is the single source of style truth for it.
+#   .cs                        -> dotnet format, scoped to the nearest .csproj
+#   .ts .html .scss .css .json .md -> prettier --write (+ eslint --fix for .ts)
 #
 # Never fails the session: a missing tool is a skip with a message, not an error.
 # Informational output goes to stderr; stdout stays empty so the harness does not
@@ -60,7 +58,7 @@ FILE="$(json_str 'tool_input.file_path')"
 [ -f "$FILE" ] || exit 0
 
 case "$FILE" in
-  */bin/*|*/obj/*|*/.git/*) exit 0 ;;
+  */node_modules/*|*/bin/*|*/obj/*|*/dist/*|*/.git/*) exit 0 ;;
 esac
 
 # Resolve to a physical path. If the workspace path and the --include path
@@ -112,9 +110,43 @@ format_cs() {
   log "formatted ${FILE##*/}"
 }
 
+# ---------------------------------------------------------------------------
+# Web assets — prettier, plus eslint --fix for TypeScript
+# ---------------------------------------------------------------------------
+format_web() {
+  if ! command -v npx >/dev/null 2>&1; then
+    log "npx not installed — skipping ${FILE##*/}"
+    return 0
+  fi
+
+  # Run from the nearest directory that has a package.json so the local
+  # prettier/eslint config and binaries are the ones that get used.
+  dir="$(cd "$(dirname "$FILE")" && pwd -P)"
+  root=""
+  while [ "$dir" != "/" ] && [ -n "$dir" ]; do
+    if [ -f "$dir/package.json" ]; then root="$dir"; break; fi
+    dir="$(dirname "$dir")"
+  done
+  [ -z "$root" ] && { log "no package.json above ${FILE##*/} — skipping"; return 0; }
+
+  if ! (cd "$root" && npx --no-install prettier --write "$FILE" >/dev/null 2>&1); then
+    log "prettier unavailable or failed on ${FILE##*/} — skipped"
+    return 0
+  fi
+
+  case "$FILE" in
+    *.ts|*.tsx|*.mts|*.cts)
+      (cd "$root" && npx --no-install eslint --fix "$FILE" >/dev/null 2>&1) \
+        || log "eslint --fix reported unfixable issues in ${FILE##*/}"
+      ;;
+  esac
+  log "formatted ${FILE##*/}"
+}
+
 case "$FILE" in
-  *.cs) format_cs ;;
-  *)    : ;;
+  *.cs)                                        format_cs ;;
+  *.ts|*.tsx|*.mts|*.cts|*.html|*.scss|*.css|*.json|*.md) format_web ;;
+  *)                                           : ;;
 esac
 
 exit 0

@@ -1,11 +1,11 @@
 # ADR-XXXX: <Short decision, stated as a fact>
 
-**Status:** Proposed | Accepted | Deprecated | Superseded by ADR-YYYY (link the file)
+**Status:** Proposed | Accepted | Deprecated | Superseded by [ADR-YYYY](YYYY-....md)
 **Date:** YYYY-MM-DD
 **Deciders:** <names>
-**Supersedes:** — | ADR-ZZZZ (link the file)
+**Supersedes:** — | [ADR-ZZZZ](ZZZZ-....md)
 
-> One file per decision. Number them sequentially: `0007-short-slug.md`. Never rewrite history
+> One file per decision. Number them sequentially: `0008-short-slug.md`. Never rewrite history
 > — a decision that turned out wrong gets a *new* ADR that supersedes it, and this one is marked
 > `Superseded`. An ADR records why a choice was made at a point in time; that record stays true
 > even when the choice stops being.

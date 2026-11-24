@@ -61,6 +61,7 @@ Task: <task type> — cheapest sufficient tier: <FRONTIER|WORKHORSE>.
 | Final pre-push review | **Frontier** |
 | Normal implementation / CRUD | **Workhorse** (Sonnet-class) |
 | Tests (unit / integration / architecture / component) | **Workhorse** |
+| Frontend build / UI | **Workhorse** |
 | Database migrations | **Workhorse** |
 | Static-analysis fixes | **Workhorse** |
 | Docs / config updates | **Workhorse** |

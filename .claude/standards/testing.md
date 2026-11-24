@@ -18,6 +18,13 @@ Testing is required, not optional. **Verification precedes any claim of "done"**
   nothing; Application → Domain; Infrastructure → Application + Domain; Contracts carries no
   business logic; Api is the composition root.
 
+## Frontend tests
+
+- **Vitest** for services, signals, pipes, and component logic.
+- **Playwright** (`apps/web-e2e`) for user journeys — at least one per route.
+- **axe-core** accessibility assertions on every new or changed screen.
+- Type-checking is part of the test surface.
+
 ## What must be covered
 
 - **Every domain invariant** in the spec has a test that fails when the invariant is broken.
@@ -43,10 +50,9 @@ Testing is required, not optional. **Verification precedes any claim of "done"**
 ## Commands
 
 ```bash
-dotnet test                                         # all three test projects
-dotnet test tests/AjBoilerplate.UnitTests           # fast, no dependencies
-dotnet test tests/AjBoilerplate.ArchitectureTests   # fast, no dependencies
-dotnet test tests/AjBoilerplate.IntegrationTests    # needs Docker
+dotnet test                                       # all backend test projects
+npx nx run-many -t test typecheck                 # frontend unit tests + types
+npx nx e2e web-e2e                                # Playwright journeys
 ```
 
 ## Gate

@@ -1,16 +1,16 @@
 # Standard: API Design
 
-**Style:** RESTful HTTP JSON API on ASP.NET Core. Contracts are published to consumers via
+**Style:** RESTful HTTP JSON API on ASP.NET Core. Contracts are shared with the frontend via
 OpenAPI.
 
 ## Contracts & DTOs
 
 - All request/response bodies are **DTOs in `AjBoilerplate.Contracts`** — pure data, no
   business logic, no domain or EF Core types.
-- The **OpenAPI document is the single source of truth** for consumers, who generate their
-  clients from it (see [`swagger-openapi.md`](swagger-openapi.md)). Its accuracy is therefore
-  a correctness concern, not a documentation nicety.
-- Swagger UI is enabled at least in Development so the contract can be read and diffed.
+- The **OpenAPI document is the single source of truth** for the frontend. The frontend
+  generates its types from it into `libs/data-access/api-types` — **no hand-duplicated
+  models** (see [`angular.md`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/.claude/standards/angular.md) and [`swagger-openapi.md`](swagger-openapi.md)).
+- Swagger UI is enabled at least in Development so the frontend can sync.
 
 ## Envelope & status codes
 
@@ -50,4 +50,4 @@ OpenAPI.
 
 ## Related
 
-[`clean-architecture.md`](clean-architecture.md) · [`dotnet.md`](dotnet.md) · [`api-response-format.md`](api-response-format.md) · [`security.md`](security.md) · [`swagger-openapi.md`](swagger-openapi.md)
+[`clean-architecture.md`](clean-architecture.md) · [`dotnet.md`](dotnet.md) · [`api-response-format.md`](api-response-format.md) · [`security.md`](security.md) · [`angular.md`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/.claude/standards/angular.md)

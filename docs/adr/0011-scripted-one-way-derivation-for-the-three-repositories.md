@@ -10,18 +10,12 @@
 > ADR-0006 is not superseded and its decision is unchanged. This ADR fills the gap it
 > left open.
 
-> **The script itself is not in this repository, and that is the decision working, not a
-> gap.** `scripts/derive.sh` lives in `aj-boilerplate-fs`, which is the source of truth. This
-> tree is one of its OUTPUTS, so shipping the generator here would invite someone to run it
-> from a derived repository and regenerate the very tree they are standing in. Read this ADR
-> as the record of how this repository comes to exist; run the script upstream.
-
 ---
 
 ## Context
 
 ADR-0006 split the boilerplate into three published repositories — `aj-boilerplate-fs`
-(the source of truth), `aj-boilerplate-be` (`src/backend/` promoted to the repository
+(the source of truth), `aj-boilerplate-be` (`./` promoted to the repository
 root), and `aj-boilerplate-fe` (`src/frontend/` promoted to the root). It listed drift as
 the standing risk of that decision, in as many words: *"Three repositories must be kept in
 sync, and there is no mechanism enforcing it. Drift is the standing risk of this decision
@@ -49,7 +43,7 @@ Four forces shape what the fix can be:
   merge base and no possibility of a git-native sync. Whatever we build copies files.
 - **Not everything can be derived mechanically.** `README.md` describes two stacks.
   `CLAUDE.md` exists at the root and again inside each stack, and ADR-0006 says they
-  merge. A workflow that names both `src/backend` and `src/frontend` in a build matrix
+  merge. A workflow that names both `.` and `src/frontend` in a build matrix
   needs an entry deleted, not a path rewritten. A script that pretends otherwise produces
   a repository that looks derived and is subtly wrong, which is worse than one that
   obviously needs work.
@@ -82,7 +76,7 @@ The script:
   reports the collision. Dotfiles are suffixed correctly: `.editorconfig` becomes
   `.editorconfig.be`, not `.be.editorconfig`, which would be a different file that no tool
   reads.
-- **Rewrites in-file path references heuristically, and says so.** `src/backend/x` becomes
+- **Rewrites in-file path references heuristically, and says so.** `./x` becomes
   `x` in Markdown, YAML, JSON, and shell files. Files where that substitution produces
   something plausible and wrong — `README.md`, `.github/workflows/supply-chain.yml`,
   `.github/dependabot.yml` — are copied untouched and listed under NEEDS REVIEW.
@@ -90,9 +84,26 @@ The script:
   and pruning the other stack's entries from the matrix-shaped configuration files are
   named as human work, every run.
 - **Runs a cross-contamination check** after writing: no `src/frontend` in `be`, no
-  `src/backend` in `fe`, no stray `package.json` or `*.csproj` from the other stack, and
+  `.` in `fe`, no stray `package.json` or `*.csproj` from the other stack, and
   every shared harness file present. This is the drift check ADR-0006 asked for, applied
   at the moment of derivation rather than after publication.
+
+**Amended 2026-11-24 (the 1.0.0 derivation).** Five rules were added to what the script decides, after
+the first derivation of the gateway-auth release showed what a hand-maintained derived repository
+had drifted into:
+
+- one `.env.example`, filtered per stack by `# @derive keep=...` blocks, instead of a second copy
+  at `./.env.example` that collided with the root file;
+- Markdown links re-pointed per repository by `scripts/derive-links.py` (to where the target lands,
+  or to `aj-boilerplate-fs` on GitHub when it does not ship);
+- `scripts/derive.sh` and `scripts/derive-links.py` are not shipped;
+- the other stack's agents, standards, templates and commands under `.claude/` are dropped, and for
+  the frontend repository so are `infra/` and the backend deploy workflows;
+- the frontend finds the one OpenAPI document by lookup (`scripts/generate-api.mjs`), so no code is
+  rewritten and no second copy exists.
+
+"Shared verbatim" above is therefore true of `docs/` and of `.claude/` (less the other stack's files),
+and **not** of the files the script's header lists as still hand-maintained per derived repository.
 
 **Dry run is the default.** `scripts/derive.sh` prints the plan and writes nothing.
 Writing requires `--write`.
@@ -134,7 +145,7 @@ described in `CONTRIBUTING.md` and `CHANGELOG.md`.
   run the script and do the manual steps. If nobody does, the repositories drift exactly
   as before — the script removes the excuse, not the requirement.
 - **The path-rewriting is a heuristic and will be wrong occasionally.** It is a textual
-  substitution. It cannot know that `'src/backend/**'` in a workflow path filter should
+  substitution. It cannot know that `'./**'` in a workflow path filter should
   become `'**'` rather than `'./**'`. The NEEDS REVIEW list contains the files where we
   know this bites; it will not contain the next one until someone hits it.
 - **Three of the most-read files still need a human every time**: `README.md`,
@@ -252,7 +263,7 @@ How we know it has stopped serving us — any of these should trigger a supersed
 ## References
 
 - [ADR-0006](0006-three-repository-split.md) — the three-repository split this builds on
-- [scripts/derive.sh](../../scripts/derive.sh) — the mechanism
+- [scripts/derive.sh](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/scripts/derive.sh) — the mechanism
 - [docs/upgrading.md](../upgrading.md) — the related but distinct problem of a *consumer*
   pulling improvements back in, which derivation does not address
 - [CONTRIBUTING.md](../../CONTRIBUTING.md) — where derivation sits in the release process

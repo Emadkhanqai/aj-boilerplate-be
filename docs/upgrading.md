@@ -8,12 +8,6 @@ This page is how. It is also honest about the parts that do not work, because th
 here is not "the upgrade is hard", it is "someone spent two days on a merge that was never going
 to converge".
 
-> **Paths in this document are the full-stack repository's.** This is `aj-boilerplate-be`, where
-> the backend sits at the repository root — so read `src/backend/src/**` as `src/**`,
-> `src/backend/tests/**` as `tests/**`, and so on. Rows describing `src/frontend/**` have no
-> counterpart here; skip them. The mapping is deliberate rather than tidied away: upstream is
-> `aj-boilerplate-fs`, and a merge you attempt will be against *its* paths, not these.
-
 ---
 
 ## The core problem, stated precisely
@@ -55,9 +49,9 @@ if you get the layer right, the strategy follows almost automatically.
 |---|---|---|---|
 | **Harness and process** | `.claude/`, `.github/workflows/`, `.mcp.json`, `.editorconfig`, `.gitignore`, `docs/` process pages | **Nearly always mergeable** | You almost certainly have not edited them. They are stack-shaped, not product-shaped, and they are where most of the boilerplate's ongoing value lives. |
 | **Infrastructure and packaging** | `infra/gcp/`, `infra/azure/`, `src/*/Dockerfile`, `src/*/docker-compose.yml`, `src/frontend/nginx.conf`, added CI jobs | **Mergeable with care** | You have parameterised these — project IDs, regions, resource prefixes, secret names. Take the structural change, keep your values. Review every line. |
-| **Application source** | `src/backend/src/**`, `src/frontend/apps/**`, `src/frontend/libs/**` | **Effectively unmergeable** | This is your product. The boilerplate's version is a demonstration you were meant to grow past. |
-| **Schema history** | `src/backend/src/AjBoilerplate.Infrastructure/Persistence/Migrations/**` | **Never mergeable** | See [below](#what-cannot-be-merged-cleanly-ever). |
-| **The sample slice** | `Item` — `src/backend/src/*/Items/`, `src/frontend/libs/feature-items/` | **Never mergeable** | You were told on day one to delete it. If you kept it, upstream changes to it are noise; if you deleted it, they are conflicts against nothing. |
+| **Application source** | `./src/**`, `src/frontend/apps/**`, `src/frontend/libs/**` | **Effectively unmergeable** | This is your product. The boilerplate's version is a demonstration you were meant to grow past. |
+| **Schema history** | `./src/AjBoilerplate.Infrastructure/Persistence/Migrations/**` | **Never mergeable** | See [below](#what-cannot-be-merged-cleanly-ever). |
+| **The sample slice** | `Item` — `./src/*/Items/`, `src/frontend/libs/feature-items/` | **Never mergeable** | You were told on day one to delete it. If you kept it, upstream changes to it are noise; if you deleted it, they are conflicts against nothing. |
 | **Project identity** | `CLAUDE.md`, `README.md`, `docs/architecture.md` | **Effectively unmergeable** | Project-specific by design. `CLAUDE.md` describes *your* stack and conventions. Read the upstream diff for ideas; never apply it. |
 
 Two notes on that table. First, `docs/` splits: the process pages (this one, `workflow.md`,
@@ -204,7 +198,10 @@ changed **structurally** rather than incrementally:
 - The response envelope or error contract changed — see
   [ADR-0005](adr/0005-apiresponse-envelope-and-status-code-contract.md) for the kind of decision
   that would do this.
-- The authentication or authorization model changed.
+- The authentication or authorization model changed. **This has happened once: 1.0.0 replaced
+  browser-side OIDC with gateway session authentication.** If you cloned 0.1.x and kept its
+  sign-in, go straight to
+  [Upgrading from 0.1.x to 1.0](#upgrading-from-01x-to-10) below instead of attempting a merge.
 - The frontend workspace layout changed — apps and libraries reshuffled, Nx boundaries redrawn.
 
 In those cases a merge is not conservative, it is a slow-motion rewrite with conflict markers. A
@@ -303,7 +300,7 @@ about whether you should care.
 
 Name these explicitly so nobody burns an afternoon proving it.
 
-**EF Core migration history.** `src/backend/src/AjBoilerplate.Infrastructure/Persistence/Migrations/`
+**EF Core migration history.** `./src/AjBoilerplate.Infrastructure/Persistence/Migrations/`
 cannot be merged, for two independent reasons. First, migrations are ordered by a timestamp
 prefix, so two trees' migrations **interleave** rather than append — an upstream migration dated
 before yours would have to run after yours, which is not a thing EF Core supports. Second,
@@ -363,6 +360,34 @@ the entry that gets skipped when a release is rushed.
 
 The general principle behind all four: **the maintainer pays once, every consumer pays every
 time.** Any cost you can move upstream, move upstream.
+
+---
+
+
+## Upgrading from 0.1.x to 1.0
+
+1.0.0 changed the sign-in model and several configuration keys, so it is a major upgrade. The
+step-by-step list is in the [1.0.0 changelog entry](../CHANGELOG.md#100--2026-11-24) under
+"Upgrade steps from 0.1.x". The short form, in the order that avoids surprises:
+
+1. **Read [ADR-0012](adr/0012-gateway-session-auth.md) and [docs/auth/](auth/README.md).** The
+   browser no longer holds a token; an Auth service and an nginx gateway do the sign-in.
+2. **Choose `AUTH_PROVIDER`.** `embedded` (you deploy the Auth service) outside the Al Jazeera USP
+   platform, `usp` inside it.
+3. **Take these wholesale** (you almost certainly did not change them): `./src/AjBoilerplate.Auth/`,
+   `./tests/AjBoilerplate.Auth.Tests/`, `src/frontend/docker/`, `infra/keycloak/`,
+   `docs/auth/`, and the new root `docker-compose.yml`.
+4. **Merge by hand** (you probably did change them): `./src/AjBoilerplate.Api/Identity/`,
+   `Program.cs`, `libs/auth`, `libs/data-access/api-client`, `app.config.ts`, `.env.example`.
+5. **Delete** `src/frontend/nginx.conf`, every `OIDC_*` and `Authentication__*` setting, and
+   `Keycloak__Realm` / `Keycloak__ClientSecret`.
+6. **Apply the new migration** to your app database and create the Auth database.
+7. **Re-run the gate**, then sign in as a user with a role, one without, and one whose role you
+   remove while they are signed in.
+
+Only `infra/gcp` deploys the Auth service and the web container; on Azure, and for Keycloak anywhere,
+that work is yours. See [deploying](auth/setup.md#deploying-the-auth-service-and-the-web-gateway) and
+[what is not deployed](auth/setup.md#what-is-not-deployed).
 
 ---
 

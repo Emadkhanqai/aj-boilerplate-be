@@ -6,12 +6,6 @@
 
 ---
 
-> **You are reading this in `aj-boilerplate-be`** — the backend-only repository this decision
-> produces. The frontend half lives in
-> [`aj-boilerplate-fe`](https://github.com/Emadkhanqai/aj-boilerplate-fe), and both are derived
-> from [`aj-boilerplate-fs`](https://github.com/Emadkhanqai/aj-boilerplate-fs). The paths named
-> below (`src/backend/`, `src/frontend/`) are paths in that source tree, not in this one.
-
 ## Context
 
 Not every project needs both halves. A team building a service with no web UI should not clone
@@ -30,18 +24,18 @@ We will publish three repositories, all derived from this single full-stack tree
 
 | Repository | Contents |
 |---|---|
-| [`aj-boilerplate-fs`](https://github.com/Emadkhanqai/aj-boilerplate-fs) | The source of truth — backend, frontend, infra, docs, harness |
-| [`aj-boilerplate-be`](https://github.com/Emadkhanqai/aj-boilerplate-be) | `src/backend/` promoted to the repository root; backend CI only |
-| [`aj-boilerplate-fe`](https://github.com/Emadkhanqai/aj-boilerplate-fe) | `src/frontend/` promoted to the repository root; frontend CI only |
+| `aj-boilerplate-fs` | The source of truth — backend, frontend, infra, docs, harness |
+| `aj-boilerplate-be` | `./` promoted to the repository root; backend CI only |
+| `aj-boilerplate-fe` | `src/frontend/` promoted to the repository root; frontend CI only |
 
 Derivation rules:
 
 - **Shared verbatim** across all three: `.claude/`, `.mcp.json`, `.gitignore`, `.editorconfig`,
   and the stack-neutral pages of `docs/`.
-- **`aj-boilerplate-be`** drops `src/frontend/`, `frontend-ci.yml`, the frontend ADRs (0003 and
-  0004), and the frontend-specific docs; the backend `CLAUDE.md` merges into the root one;
-  `infra/` keeps SQL, Redis, and the API runtime.
-- **`aj-boilerplate-fe`** drops `src/backend/`, `backend-ci.yml`, and the migration and database
+- **`aj-boilerplate-be`** drops `src/frontend/`, `frontend-ci.yml`, and the frontend-specific
+  docs; the backend `CLAUDE.md` merges into the root one; `infra/` keeps SQL, Redis, and the API
+  runtime.
+- **`aj-boilerplate-fe`** drops `./`, `backend-ci.yml`, and the migration and database
   docs; the frontend `CLAUDE.md` merges into the root one; it keeps a committed OpenAPI document
   so types can be generated without a running API.
 - **Documentation is written stack-scoped**, one page per stack rather than one page covering

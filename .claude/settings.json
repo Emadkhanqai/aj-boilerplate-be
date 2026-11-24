@@ -22,6 +22,11 @@
           },
           {
             "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/commit-msg.sh",
+            "timeout": 15
+          },
+          {
+            "type": "command",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/sonar-pre-push.sh",
             "timeout": 300
           }
@@ -111,6 +116,7 @@
       "Bash(gh pr merge *)",
       "Bash(gcloud *)",
       "Bash(az *)",
+      "Bash(npm publish *)",
       "Bash(dotnet ef database update *)"
     ],
     "allow": [
@@ -122,6 +128,13 @@
       "Bash(dotnet run *)",
       "Bash(dotnet ef migrations *)",
       "Bash(dotnet user-secrets *)",
+      "Bash(npm ci)",
+      "Bash(npm install)",
+      "Bash(npm run *)",
+      "Bash(npm audit *)",
+      "Bash(npx nx *)",
+      "Bash(npx prettier *)",
+      "Bash(npx eslint *)",
       "Bash(git status *)",
       "Bash(git diff *)",
       "Bash(git log *)",
@@ -160,6 +173,7 @@
     "superpowers@superpowers-marketplace": true,
     "document-skills@anthropic-agent-skills": true,
     "backend-development@claude-code-workflows": true,
+    "frontend-mobile-development@claude-code-workflows": true,
     "unit-testing@claude-code-workflows": true,
     "database-migrations@claude-code-workflows": true,
     "security-scanning@claude-code-workflows": true,

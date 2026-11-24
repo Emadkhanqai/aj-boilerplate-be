@@ -4,7 +4,7 @@
 > [`../model-routing.md`](../model-routing.md). New-capability *design* → frontier tier; the
 > *build and tests* that follow → workhorse tier. Say so if the current model is mismatched.
 
-End-to-end flow for a new capability, from the domain out to the published contract.
+End-to-end flow for a new capability across the stack.
 
 ## 1. Understand & plan
 
@@ -19,7 +19,7 @@ End-to-end flow for a new capability, from the domain out to the published contr
 
 `git switch -c feature/<short-desc>`. Never work on `main` directly.
 
-## 3. Build it, inside out
+## 3. Backend (if applicable)
 
 1. **Domain** — entities and invariants, persistence-ignorant. Guard the rules inside the
    aggregate so an invalid state is unconstructible.
@@ -35,21 +35,31 @@ End-to-end flow for a new capability, from the domain out to the published contr
    ([`../standards/middleware.md`](../standards/middleware.md)).
 6. **Tests** — Unit + Integration + Architecture, including a negative authorization test.
 
-## 4. Publish the contract
+## 4. Sync contracts
 
-Complete the OpenAPI annotations — a `[ProducesResponseType]` for **every** status code the
-action can return — and refresh the snapshot in `docs/api/` so the contract change shows up in
-the diff. Consumers generate their clients from that document. See
+Update OpenAPI, refresh the snapshot in `docs/api/`, and regenerate the frontend types with
+[`/sync`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/.claude/commands/sync.md) into `libs/data-access/api-types`. See
 [`api-change.md`](api-change.md).
 
-## 5. Verify locally
+## 5. Frontend (if applicable)
+
+1. **Read `src/frontend/DESIGN.md` before writing any component.**
+2. Feature library under `src/frontend/libs/feature-<name>`; all HTTP through
+   `data-access/api-client` using **generated** types; **versioned** endpoints only.
+3. Standalone components, `OnPush`, signals, `inject()`, **typed reactive forms**, PrimeNG
+   only. Handle **loading / error / empty / success**; surface `traceId` on errors.
+4. **Role-aware UI is UX, never security.** No `innerHTML`/`bypassSecurityTrust*` with user
+   content.
+5. Vitest for logic, a Playwright journey for the new route, axe-core clean.
+
+## 6. Verify locally
 
 ```bash
-dotnet build -warnaserror
-dotnet test                # unit + architecture + integration (needs Docker)
+cd .  && dotnet build && dotnet test
+cd src/frontend && npx nx run-many -t lint typecheck test build
 ```
 
-## 6. Review & gate
+## 7. Review & gate
 
 Run [`/qa`](../commands/qa.md), then [`/review`](../commands/review.md), then
 [`pre-push-quality-gate.md`](pre-push-quality-gate.md). Fix every Blocker/Critical/Major.

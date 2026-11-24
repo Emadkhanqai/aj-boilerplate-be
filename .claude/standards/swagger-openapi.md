@@ -1,7 +1,7 @@
 # Standard: Swagger / OpenAPI
 
 OpenAPI is a first-class deliverable: it documents the API for humans and is the **source of
-truth every consumer generates its client from**.
+truth for frontend type generation**.
 
 ## Rules
 
@@ -14,7 +14,7 @@ truth every consumer generates its client from**.
   `PagedResponse<T>` (see [`api-response-format.md`](api-response-format.md)).
 - **Document error responses** (400 / 401 / 403 / 404 / 409 / 410 / 429 / 500 / 503) with
   their `code` values.
-- **Document auth requirements** — register the OIDC/bearer security scheme and mark protected
+- **Document auth requirements** — register the bearer (Keycloak JWT) security scheme and mark protected
   endpoints. Any separate scoped-token scheme is documented as its own security scheme.
 - **Document API versions** as separate OpenAPI groups (`v1`, `v2`) — see
   [`api-versioning.md`](api-versioning.md).
@@ -24,14 +24,14 @@ truth every consumer generates its client from**.
 - **The document must be clean enough for client generation** — every schema named, no
   anonymous or duplicated types, nullability accurate, enums emitted as named strings.
 
-## The document is a published artefact
+## Frontend type generation
 
-- Consumers **generate** their clients from this document. A missing `[ProducesResponseType]`
-  therefore produces a client that cannot handle the failure — treat it as a bug, not a docs gap.
+- Frontend types are generated from OpenAPI into `libs/data-access/api-types`
+  (`openapi-typescript`). Hand-written HTTP clients and hand-copied DTOs are **prohibited**
+  (see [`angular.md`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/.claude/standards/angular.md)).
+- Regeneration is a command, not a manual edit: run `/sync` after any API surface change.
 - The committed OpenAPI snapshot lives in `docs/api/` so contract drift is visible in the
   diff. A pull request that changes a controller signature but not the snapshot is incomplete.
-- If the generated document is wrong, the annotation is wrong. Never correct the description
-  anywhere downstream instead.
 
 ## Setup checklist
 
@@ -43,4 +43,4 @@ truth every consumer generates its client from**.
 
 ## Related
 
-[`api-versioning.md`](api-versioning.md) · [`api-response-format.md`](api-response-format.md) · [`../../docs/api/README.md`](../../docs/api/README.md)
+[`api-versioning.md`](api-versioning.md) · [`api-response-format.md`](api-response-format.md) · [`../commands/sync.md`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/.claude/commands/sync.md)

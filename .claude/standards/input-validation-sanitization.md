@@ -29,7 +29,7 @@ will be displayed. Never trust the client.
 
 - **Sanitize or encode free-text fields where they are displayed or exported** (names, notes,
   comments, templates) as defence-in-depth against stored XSS. **Store raw, encode on output**;
-  the client escapes as well.
+  the frontend escapes as well (see [`angular.md`](https://github.com/Emadkhanqai/aj-boilerplate-fs/blob/main/.claude/standards/angular.md)).
 - Reject or neutralise control characters and oversized payloads at the boundary.
 - Treat file uploads as hostile: validate content type by sniffing, not by extension; cap size;
   store outside the web root; never execute.

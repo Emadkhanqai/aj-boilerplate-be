@@ -4,6 +4,7 @@ Use with [`../workflows/ef-core-migration.md`](../workflows/ef-core-migration.md
 [`/new-migration`](../commands/new-migration.md).
 
 ```bash
+cd .
 dotnet ef migrations add <PascalCaseName> \
   --project src/AjBoilerplate.Infrastructure \
   --startup-project src/AjBoilerplate.Api \

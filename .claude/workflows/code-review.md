@@ -13,11 +13,13 @@ slash-command form is [`/review`](../commands/review.md); the agent form is
 - [ ] Backend dependency directions correct (Domain → nothing; Application → Domain;
       Infrastructure → Application + Domain; Api → Application + Infrastructure + Contracts;
       Contracts = DTOs only).
+- [ ] Frontend Nx module boundaries respected; `shared/util` imports nothing; no feature
+      imports another feature.
 
 **Standards**
 - [ ] Matches the relevant files in [`../standards/`](../standards/).
-- [ ] Nullable reference types enabled and warnings-as-errors respected.
-- [ ] No `DateTime.UtcNow` — `IClock` everywhere.
+- [ ] No `any` (TypeScript); nullable enabled and warnings-as-errors respected (C#).
+- [ ] Components under ~300 lines; standalone + OnPush + signals + `inject()`.
 
 **Correctness**
 - [ ] Implements what the spec in `docs/specs/` actually says — and only that.
@@ -35,7 +37,7 @@ slash-command form is [`/review`](../commands/review.md); the agent form is
 **API contract**
 - [ ] Versioned route; `ApiResponse<T>` envelope with `traceId`.
 - [ ] Correct status code per the table (hide-as-404, 409-for-concurrency, 410-vs-404).
-- [ ] OpenAPI annotations complete for every status code; the `docs/api/` snapshot updated.
+- [ ] OpenAPI and the `docs/api/` snapshot updated; generated frontend types regenerated.
 
 **Data**
 - [ ] Migration present, business-named, hand-reviewed, and **not** an edit to an applied one.
@@ -45,12 +47,14 @@ slash-command form is [`/review`](../commands/review.md); the agent form is
 
 **Forbidden patterns**
 - [ ] No `EnsureCreated`, no manual DDL.
-- [ ] No EF Core entity bound to a request body or returned in a response.
-- [ ] No error response constructed by hand in a controller.
+- [ ] No hand-written frontend HTTP client, no hand-duplicated DTO.
+- [ ] No native HTML control where PrimeNG is required.
+- [ ] No `bypassSecurityTrust*` / `innerHTML` on user content.
 
 **Tests**
 - [ ] New and changed behaviour covered; architecture tests updated.
 - [ ] A negative authorization test exists.
+- [ ] Playwright journey and axe-core run for any new route.
 
 ## Output
 

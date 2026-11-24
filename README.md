@@ -4,7 +4,7 @@
 
 # Agentic Backend Boilerplate
 
-**A .NET 10 API starting point that ships with its own engineering guardrails.**
+**A .NET 10 API and a sign-in service that ship with their own engineering guardrails.**
 
 [![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![SQL Server](https://img.shields.io/badge/SQL_Server-EF_Core_10-CC2927?logo=microsoftsqlserver&logoColor=white)](https://learn.microsoft.com/ef/core/)
@@ -17,471 +17,227 @@
 
 ## What this is
 
-Most "starter templates" give you a folder structure and leave the hard parts — layering that
-actually holds, an API contract consumers can trust, a quality gate that blocks bad merges,
-infrastructure you can read — as an exercise. This one ships those parts working, with a single
-sample entity proving the whole path end to end.
+1. A **.NET 10 API** with layered Clean Architecture, EF Core on SQL Server, a uniform
+   `ApiResponse<T>` envelope and a committed OpenAPI contract that clients generate code from.
+2. An **Auth service** (`AjBoilerplate.Auth`) that signs users in with Microsoft Entra ID and mints
+   a Keycloak JWT for the API, so the browser never holds a token. It also carries the user-admin
+   routes (`/internal/admin/*`, over Keycloak's Admin REST API), a cross-portal hand-off, the
+   Pub/Sub `/auth/events` push and a session-ended outbox; the API carries the matching sign-in
+   history, session-ended receiver, `/api/v1/me/portals` and an `/api/v1/admin/*` proxy. Each is
+   off or 404 until configured ([docs/auth/setup.md](docs/auth/setup.md#5-configuration-reference)).
+3. A **quality gate and a committed `.claude/` harness** that enforce the rules instead of
+   describing them.
 
-It is also built to be driven by [Claude Code](https://claude.com/claude-code). A `.claude/`
-harness ships **committed, not gitignored**: hooks that format on save, block dangerous shell
-commands, protect sensitive files, run the affected tests, scan for secrets, and gate a push on
-the quality gate — plus slash commands for the recurring work.
+It contains **no business domain**. The sample `Item` is meant to be deleted on day one; the
+"What's new" spotlight is domain-free plumbing worth keeping.
 
-It contains **no business domain**. The one sample entity, `Item`, is designed to be deleted on
-your first day. The other module that ships — the "what's new" feature spotlight — is not a
-sample: it is a small piece of product plumbing most applications end up needing, and it is meant
-to be kept.
+> **This is the backend half of a three-repository set.** The browser app and the **gateway nginx**
+> live in [`aj-boilerplate-fe`](https://github.com/Emadkhanqai/aj-boilerplate-fe); both together
+> are [`aj-boilerplate-fs`](https://github.com/Emadkhanqai/aj-boilerplate-fs), which also has the
+> one-command local stack with sign-in. These repositories are derived from `fs`
+> ([ADR-0006](docs/adr/0006-three-repository-split.md)): change `fs`, not this one.
 
-## Why it exists
+## What is in this repository, and what is not
 
-Every new service re-litigates the same decisions: where do business rules live, what shape is
-an error response, who owns the API contract, what blocks a merge, how do we get to two clouds
-without forking the codebase. Those decisions are made here, written down as
-[ADRs](docs/adr/), and enforced by tests and CI rather than by convention.
+```mermaid
+flowchart LR
+  subgraph FE["aj-boilerplate-fe (not here)"]
+    B["Browser"] --> N["nginx gateway<br/>+ Angular app"]
+  end
+  subgraph BE["this repository"]
+    A["Auth service<br/>src/AjBoilerplate.Auth"]
+    P["API<br/>src/AjBoilerplate.Api"]
+    D[("SQL Server")]
+    R[("Redis")]
+  end
+  N -->|"auth_request"| A
+  N -->|"Authorization: Bearer jwt"| P
+  A -->|"code + PKCE"| E["Microsoft Entra ID<br/>(yours)"]
+  A -->|"token exchange"| K["Keycloak<br/>(yours; realm file in infra/keycloak)"]
+  P -->|"JWKS"| K
+  A --- D
+  A --- R
+  P --- D
+  P --- R
+```
 
-## What you get
-
-- **Layered Clean Architecture** — `Domain` → `Application` → `Contracts` → `Infrastructure` →
-  `Api`, with an architecture test suite that fails the build when the dependency direction is
-  violated. It checks compiled assembly references, so the rule cannot be talked around.
-- **A consistent API envelope** — every response is `ApiResponse<T>` with a stable
-  machine-readable `code`, a `traceId`, and a documented status-code contract. Exceptions map
-  to responses through an `IExceptionHandler` chain, not through try/catch in controllers.
-- **OpenAPI as the published contract** — the document is generated from the controllers and
-  the contract types, and consumers generate their clients from it. A missing
-  `[ProducesResponseType]` is a bug. See [docs/api/](docs/api/).
-- **EF Core migration workflow** — MSSQL, migration-based, with three migrations in the box
-  (`InitialCreate`, `AddFeatureAnnouncements`, and `AddIdempotencyRecords`) so the workflow is
-  demonstrated rather than described.
-- **A "what's new" feature spotlight** — server-side announcements that surface to each user
-  exactly once, on the routes you bind them to, with the dismissal recorded per user so it
-  survives cleared browser storage and a second device. Two endpoints, two tables, no seeded
-  rows: each announcement ships as its own INSERT-only migration, and no service code changes to
-  add one. See [docs/whats-new.md](docs/whats-new.md).
-- **Real integration tests** — the suite starts its own SQL Server through Testcontainers,
-  applies the migrations, and boots the real pipeline. There is no in-memory provider anywhere,
-  on purpose. 245 tests ship green: 185 unit, 9 architecture, 51 integration.
-- **Optimistic concurrency, outbox and inbox** — `rowversion` on every audited entity, and the
-  messaging tables wired end to end rather than left as a TODO.
-- **Two clouds, one switch** — `CLOUD_PROVIDER=gcp|azure` selects the secrets provider and the
-  identity issuer at the composition root, and selects which `infra/` tree deploys. Terraform
-  for GCP, Bicep for Azure, provisioning the same logical shape.
-- **A real quality gate** — build with warnings as errors, `dotnet format` verification, unit +
-  integration + architecture tests, SonarQube Community Build (zero new
-  Blocker/Critical/Major, ≥80% coverage on new code), Gitleaks, CodeQL, dependency
-  vulnerability scanning.
-- **The agentic harness** — 8 hooks and the `/spec`, `/task`, `/qa`, `/review`, `/implement`,
-  `/pre-push`, `/quality-gate`, `/new-migration` commands, all committed.
-- **A written process** — a [five-stage workflow](docs/workflow.md), a
-  [Definition of Done](docs/definition-of-done.md), a [spec template](docs/specs/TEMPLATE.md),
-  and a [Day-1 onboarding checklist](docs/onboarding.md).
-- **An architecture guide that matches the code** — [docs/architecture.md](docs/architecture.md)
-  walks every layer: what may and may not live there, what it depends on, the rule the
-  architecture tests actually enforce, a real example from the sample slice, and the mistake
-  newcomers make with it.
-
-What it is **not**: a platform, a CMS, an auth server, or a deployment you can apply as-is.
-`infra/` ships as reviewed IaC with no state and no real project identifiers — you configure a
-state backend and your own values before the first `apply`.
+| Here | Not here |
+|---|---|
+| API, Auth service, their tests, EF migrations | The Angular app and the **nginx gateway** (`aj-boilerplate-fe`) |
+| `docker-compose.yml` for `db`, `redis`, `api`, `migrate` | A compose file that also starts Keycloak, the Auth service and the gateway (`aj-boilerplate-fs`) |
+| `infra/keycloak/` (the dev-only realm) and `infra/gcp`, `infra/azure` (API only) | Anything that deploys the Auth service or the gateway: no tree does |
 
 ## Quickstart (about 5 minutes)
 
-**Prerequisites:** .NET SDK 10, Docker (for the local database and the integration suite), and
-a Keycloak realm if you want authorization enforced locally.
+**Prerequisites:** the **.NET SDK 10** (`global.json` pins `10.0.100`, newer feature bands are
+accepted) and **Docker** (for SQL Server and Redis, and for the integration suite).
 
 ```bash
-# 1 — clone
 git clone https://github.com/Emadkhanqai/aj-boilerplate-be.git
 cd aj-boilerplate-be
 
-# 2 — configure. Export what the API needs, or put it in a local .env — either way
-#     nothing here is committed; .gitignore already excludes .env and .env.*
-cp .env.example .env               # then fill in MSSQL_SA_PASSWORD
+cp .env.example .env               # then set MSSQL_SA_PASSWORD (any strong local value)
 export CLOUD_PROVIDER=gcp          # or: azure
 export ConnectionStrings__Default='Server=localhost,1433;Database=AjBoilerplate;User Id=sa;Password=<your-local-password>;TrustServerCertificate=True;'
 export ConnectionStrings__Redis='localhost:6379'
 export APP_DB_CONNECTION="$ConnectionStrings__Default"   # what the design-time factory reads
 
-# 3 — local dependencies
 docker network create app-net      # once per host
 docker compose up -d db redis
 
-# 4 — database. Applies all three migrations: InitialCreate, AddFeatureAnnouncements,
-#     AddIdempotencyRecords.
-dotnet tool restore                 # dotnet-ef, pinned in .config/dotnet-tools.json
+dotnet tool restore                # dotnet-ef, pinned in .config/dotnet-tools.json
 dotnet ef database update \
   --project        src/AjBoilerplate.Infrastructure \
   --startup-project src/AjBoilerplate.Api
 
-# 5 — run the API  →  http://localhost:5080
-dotnet run --project src/AjBoilerplate.Api
+dotnet run --project src/AjBoilerplate.Api     # http://localhost:5080
 ```
 
-Open <http://localhost:5080/swagger> and exercise **Items** — create, read, update, and delete a
-row. That round trip runs the real middleware order, the envelope filter, the controller, the
-use-case service, the repository, and the migration you just applied. **Features** is there too;
-it answers an empty array until you ship your first announcement, because the migration seeds no
-rows. (Endpoints are
-`[Authorize]`d, so you will get a `401` until you point the API at your identity provider and
-Keycloak realm — which is the correct answer, not a broken one.)
+Open <http://localhost:5080/swagger>. **Every protected endpoint answers `401` until you point the
+API at a Keycloak** (`Keycloak__ValidIssuer`, `Keycloak__JwksUri`, `Keycloak__ClientId`). That is the
+correct answer, not a broken install: the API accepts only a Keycloak JWT whose `azp` equals
+`Keycloak__ClientId`. `GET /health/ready` needs no token.
 
-Then verify the gate is green before you change anything:
+Prove the gate is green before you change anything:
 
 ```bash
 dotnet build  -warnaserror
 dotnet format --verify-no-changes
-dotnet test                        # all three suites; the integration one needs Docker
+dotnet test                        # unit, architecture, Auth.Tests; the integration suite needs Docker
 ```
 
-Full command reference: [CLAUDE.md](CLAUDE.md).
+## Authentication, for a backend-only checkout
 
-## Toolchain
+Read [docs/auth/README.md](docs/auth/README.md) for the whole model. In one paragraph: nginx (in the
+frontend) checks an opaque session cookie against the **Auth service**, which holds the Entra and
+Keycloak tokens and hands nginx a Keycloak JWT; nginx forwards it to the API as
+`Authorization: Bearer`. The API validates the JWT and enforces roles with policies (a seat **or** a
+permission). `GET /api/v1/me` returns the caller's capabilities.
 
-The SDK is pinned by [`global.json`](global.json) (`10.0.100`, `rollForward: latestFeature`) and the
-CLI tools by [`.config/dotnet-tools.json`](.config/dotnet-tools.json). Run this once per clone:
+**Where is the gateway?** In `aj-boilerplate-fe` (`docker/nginx/`), not here. What to do:
 
-```bash
-dotnet tool restore                    # dotnet-ef, swagger — at the versions this repo expects
-```
-
-`latestFeature` pins the major/minor so a machine with a newer .NET installed cannot silently build
-against it, while still accepting SDK patches and feature bands without a repo change. `dotnet-ef` is
-pinned to the same EF Core version the projects reference, so the tool that generates a migration is
-never a different version from the one that runs it.
-
-**`global.json` is resolved from the current working directory, not from the project path.** Run
-`dotnet` commands from `.` (or below). `dotnet build ...` from the repository
-root ignores this file.
-
-## Checks
-
-```bash
-dotnet build                           # warnings are errors
-dotnet test                            # needs Docker running — see below
-dotnet format --verify-no-changes
-./scripts/generate-openapi.sh --check  # the committed API contract is current
-```
-
-**`dotnet test` requires Docker.** The integration suite starts a real SQL Server container through
-Testcontainers, applies the migrations to it, and tears it down; the unit and architecture suites
-need nothing. There is no in-memory database provider anywhere in this repository, on purpose: a
-suite that cannot see a unique index, a `rowversion`, or the SQL that EF Core actually emits is not
-testing the integration. Testcontainers generates the container's password at run time, so no
-credential is committed here or in CI.
-
-Adds roughly 10 seconds to a warm run (image cached, container start included) and around a minute
-on the first run that has to pull the image.
-
-## Migrations
-
-Schema changes go through EF Core migrations only — never `EnsureCreated`, never hand-written DDL,
-and never auto-applied at application startup.
-
-```bash
-dotnet ef migrations add <IntentRevealingName> \
-  --project src/AjBoilerplate.Infrastructure \
-  --startup-project src/AjBoilerplate.Api \
-  --output-dir Persistence/Migrations
-```
-
-Review the generated `Up`/`Down` before applying. The design-time factory reads its connection
-string from `APP_DB_CONNECTION` (not `ConnectionStrings__Default`, which only the running app uses).
-
-### Deploying a schema change
-
-Migrations are **never** auto-applied at application startup. CI builds a
-[migration bundle](https://learn.microsoft.com/ef/core/managing-schemas/migrations/applying#bundles) —
-a self-contained executable that applies exactly the migrations in that commit — and uploads it as the
-`migration-bundle` artefact alongside the idempotent SQL script. The target needs no SDK, no source
-tree, and no `dotnet ef`:
-
-```bash
-./migrate --connection "$DB_CONNECTION_STRING"
-```
-
-The bundle runs **before** the new application version goes live.
-
-### The zero-downtime rule: expand → migrate → contract
-
-For the length of a deployment, the OLD code and the NEW schema are running at the same time. Every
-migration must therefore be compatible with the release that is *currently serving traffic*, not only
-with the one being deployed. That splits any destructive change across **three** releases:
-
-| Release | Schema | Code |
-|---|---|---|
-| **1 — expand** | Add the new column/table. Nullable, or with a default. Backfill it. | Write to both old and new; keep reading the old. |
-| **2 — migrate** | No destructive change. | Read from the new. The old column is now written but unread. |
-| **3 — contract** | Drop the old column/constraint/table. | Nothing references it, and has not for a whole release. |
-
-**Never ship a destructive migration in the same release as the code that stops using the column.**
-The moment the bundle runs, every instance still serving traffic is the previous version — and it is
-still selecting that column. Dropping it is an immediate, self-inflicted outage, and rolling the code
-back does not fix it, because the data is gone.
-
-The same reasoning applies to renames (a rename is a drop plus an add), to narrowing a type, and to
-adding a `NOT NULL` column with no default. Prefer additive changes; when one genuinely cannot be
-additive, it is three releases, not one.
-
-## The API contract
-
-`docs/api/openapi.json` is **committed**, and CI regenerates it and fails the build if it differs.
-The frontend generates its TypeScript types from that file, so it is the contract — and a contract
-that can change without anyone noticing is not one.
-
-```bash
-./scripts/generate-openapi.sh            # rewrite the snapshot after an intended change
-./scripts/generate-openapi.sh --check    # what CI runs
-```
-
-No running server and no database: the script loads the built assembly and asks the same
-`ISwaggerProvider` the `/swagger` endpoint uses.
-
-When the check fails, read the diff before doing anything. If the change was intended, regenerate and
-commit the snapshot **with** the code change so the contract change is reviewed rather than
-discovered; if it was not, fix the API. Never regenerate to make the gate quiet. Breaking-change
-rules are in [`docs/api/README.md`](docs/api/README.md).
-
-## Idempotency keys
-
-A client can make an unsafe request safely retryable by sending an `Idempotency-Key` header:
-
-```
-POST /api/v1/items
-Idempotency-Key: <a UUID your client generates once per logical operation>
-```
-
-Generate the key once, before the first attempt, and reuse that same value for every retry of
-that operation — a key generated per attempt is indistinguishable from no key at all. (The
-placeholder above is deliberately not a literal UUID: the repository's secret scan reads a long
-opaque token after `Key:` as a credential, and an example that trips your own gate is a bad
-example.)
-
-The first request executes and its response is stored; a retry carrying the same key returns that
-stored response (with `Idempotency-Replayed: true`) instead of creating a second record. It is
-**opt-in per request and POST-only** — traffic without the header is completely unaffected.
-
-| Situation | Result |
+| You want | Do this |
 |---|---|
-| First request | Executes normally |
-| Retry, same key, same payload, first one finished | `200`/`201` replay of the original response |
-| Retry, same key, first one still running | `409` — retry shortly |
-| Same key, **different** payload | `409` — the key was used for a different request |
-| First attempt failed (4xx/5xx) | The key is released, so the retry genuinely retries |
+| The whole thing running locally, with sign-in, now | Use [`aj-boilerplate-fs`](https://github.com/Emadkhanqai/aj-boilerplate-fs): `docker compose up --build` starts Keycloak, the Auth service, the API and the gateway with seeded users |
+| To call the API from tests or `curl` | Obtain a JWT from your Keycloak for the API's client and send it as `Authorization: Bearer`. The integration tests do the equivalent with a test authentication handler |
+| A real deployment outside Al Jazeera USP | Run the frontend repository's container with `AUTH_PROVIDER=embedded` in front of the API and the Auth service, and follow [docs/auth/setup.md](docs/auth/setup.md). **Untested from this derived repository.** |
+| A deployment inside Al Jazeera USP | Set `AUTH_PROVIDER=usp` on the web container, **do not deploy the Auth service**, and ask the USP platform team to onboard your host ([setup, section 3](docs/auth/setup.md#3-onboarding-into-usp-auth_providerusp)) |
 
-Keys are scoped to the **authenticated caller**, so two users choosing the same key never collide and
-one can never read back another's response. Only 2xx responses are stored — freezing a transient
-failure would make the client's retry key permanently unusable.
+**Running the Auth service from here:**
 
-Configuration lives under `Idempotency` (`Enabled`, `MaxResponseBytes`, `RetentionHours`). See
-[ADR-0009](docs/adr/0009-idempotency-keys-for-unsafe-requests.md).
-
-**Records are not pruned automatically.** A boilerplate should not impose a scheduler, so retention is
-yours to run — a nightly job against the index that exists for it:
-
-```sql
-DELETE TOP (5000) FROM IdempotencyRecords WHERE CreatedAt < DATEADD(hour, -24, SYSUTCDATETIME());
+```bash
+dotnet run --project src/AjBoilerplate.Auth                                # http://localhost:5090
+docker build -f src/AjBoilerplate.Auth/Dockerfile .                        # the image
 ```
 
-## Feature flags
-
-`IFeatureFlags` with a configuration-backed implementation — no third-party dependency, so the
-boilerplate does not pick a flag vendor for you.
-
-```jsonc
-// appsettings.json — or Features__NewCheckout=true in the environment
-"Features": { "NewCheckout": true }
-```
-
-```csharp
-if (_features.IsEnabled("NewCheckout")) { /* ... */ }
-```
-
-Anything unknown, blank, or not a boolean is **off**: the safe direction to be wrong in. Values are
-read through `IConfiguration` on every call, so a provider that reloads on change makes a flag
-flippable without a redeploy.
-
-A flag is **not** an authorization check — that is `RoleCapabilities` and the policies. And every flag
-is a branch that must be tested both ways, so add one with a plan for deleting it.
-
-To move to a real flag platform, implement `IFeatureFlags` over its SDK and change one registration in
-`AddInfrastructure`. No call site changes.
-
-## File storage
-
-`IFileStorage` — the counterpart to `IEmailSender`, so a flow that saves an upload is
-storage-agnostic. Keys are opaque, relative, and forward-slash separated (`invoices/2026/03/x.pdf`); a
-key that escapes its container is rejected rather than normalised.
-
-**Only the local-disk implementation ships.** The cloud arms of the `CLOUD_PROVIDER` switch are a seam,
-not an implementation, and they are honest about it:
-
-| Configuration | Behaviour |
-|---|---|
-| Nothing configured, Development | `LocalFileStorage` — real round trips under `Storage:LocalRoot` |
-| Nothing configured, deployed | Registered but throws on first use, naming what to configure |
-| `Storage:Gcp:Bucket` / `Storage:Azure:Container` set | **Fails at startup** with the steps to implement it |
-
-Adding a cloud SDK would put a heavy dependency in every consuming project, including those that store
-no files — and an untested implementation nobody has run against a real bucket is worse than none,
-because it looks finished. Configuring a bucket is a statement of intent this boilerplate cannot
-honour, so it says so at startup rather than silently writing to a container filesystem that
-disappears on the next deploy.
-
-To implement one: add the provider SDK to `AjBoilerplate.Infrastructure`, implement `IFileStorage` over
-it, and register it in `AddStorage`. Nothing that stores a file changes.
-
-## Cloud provider
-
-`CLOUD_PROVIDER` (bound as `Cloud:Provider`) accepts `gcp` (default) or `azure`. It selects two
-things and nothing else:
+It needs SQL Server (database with schema `auth`, applied by its own migration), Redis, an Entra
+app registration and a Keycloak, supplied as environment variables. The user-admin routes also need a
+Keycloak admin client (a service account), and the session-ended hop a receiver key shared with the API
+([session-ended contract](docs/auth/session-ended-contract.md)); the local stack in `aj-boilerplate-fs`
+wires both with dev-only values. The full table of keys and
+defaults is in [docs/auth/setup.md](docs/auth/setup.md#5-configuration-reference); the service's own
+page is [src/AjBoilerplate.Auth/README.md](src/AjBoilerplate.Auth/README.md). The Auth service does
+not read Secret Manager or Key Vault: your platform injects its secrets as environment variables.
+`infra/gcp` and `infra/azure` provision the API, its database, Redis and secrets, and **nothing
+deploys the Auth service**; that is the adopting project's work.
 
 ## Repository map
 
 ```
 .
-├── CLAUDE.md              project context for Claude Code — read this first
-├── AjBoilerplate.slnx     the solution: 5 source projects, 3 test projects
-├── .claude/               committed agentic harness: hooks, commands, standards, agents
-├── .mcp.json              MCP server configuration
+├── README.md · README.be.md  this file · the engineering reference (migrations, idempotency, flags, storage)
+├── CLAUDE.md                 project context for Claude Code: read first
+├── AjBoilerplate.slnx · global.json · Directory.Build.props
+├── Dockerfile · docker-compose.yml        the API image · db, redis, api, migrate
 ├── src/
-│   ├── AjBoilerplate.Domain/          entities and invariants — references nothing internal
-│   ├── AjBoilerplate.Application/     use cases, ports, validation
-│   ├── AjBoilerplate.Contracts/       wire DTOs and the response envelope
-│   ├── AjBoilerplate.Infrastructure/  EF Core, cache, transports, cloud secrets
-│   └── AjBoilerplate.Api/             controllers, middleware, auth, composition root
+│   ├── AjBoilerplate.Domain/ · Application/ · Contracts/ · Infrastructure/ · Api/   the layered API
+│   └── AjBoilerplate.Auth/                 the Auth service: independent of the five above
 ├── tests/
-│   ├── AjBoilerplate.UnitTests/
-│   ├── AjBoilerplate.IntegrationTests/    Testcontainers SQL Server
-│   └── AjBoilerplate.ArchitectureTests/   the dependency rule, as compiled-reference assertions
+│   ├── AjBoilerplate.UnitTests/ · IntegrationTests/ (Docker) · ArchitectureTests/
+│   └── AjBoilerplate.Auth.Tests/           fakes, no Docker
 ├── docs/
-│   ├── adr/               architecture decision records (+ template)
-│   ├── specs/             feature specs (+ template)
-│   ├── api/               how the OpenAPI contract is produced and consumed
-│   ├── handoff/           session handoffs written by the Stop hook
-│   ├── architecture.md    every layer, and why each boundary exists
-│   ├── whats-new.md       the feature-spotlight module, end to end
-│   ├── onboarding.md      Day-1 checklist
-│   ├── workflow.md        Spec → Plan → Execute → Verify → Review, with diagrams
-│   └── definition-of-done.md
-├── .github/
-│   ├── workflows/         backend-ci · deploy (+ its reusable per-environment job)
-│   └── gitleaks.toml      secret-scanning config; extends the default ruleset
+│   ├── auth/                 how sign-in works, setup, troubleshooting, the contract
+│   ├── adr/ · api/ · specs/ · incidents/ · handoff/
+│   └── architecture.md · onboarding.md · workflow.md · upgrading.md · definition-of-done.md
 ├── infra/
-│   ├── gcp/               Terraform: Cloud Run, Cloud SQL, Memorystore, Secret Manager
-│   └── azure/             Bicep: Container Apps, Azure SQL, Cache for Redis, Key Vault
-├── Dockerfile
-└── docker-compose.yml     local SQL Server, Redis, the API, and a migrate profile
+│   ├── keycloak/             the DEV-ONLY realm
+│   ├── gcp/                  Terraform: Cloud Run (API), Cloud SQL, Memorystore, Secret Manager
+│   └── azure/                Bicep: Container Apps (API), Azure SQL, Cache for Redis, Key Vault
+├── scripts/                  generate-openapi.sh (the contract)
+├── .claude/                  agents, commands, hooks, standards, templates
+└── .github/workflows/        backend-ci · supply-chain · deploy
 ```
 
-## How work flows here
+## Common tasks
 
-Every change — a bug fix, a feature, a refactor — moves through the same five stages, and the same
-gates. The solid path is what you do; the shaded gates fire whether or not anyone remembers them.
+**Add an endpoint with a policy.** Copy `src/AjBoilerplate.Api/Controllers/ItemsController.cs`. Every
+controller declares `[Authorize(Policy = ...)]` (`ReadAccess`, `WriteAccess`, `AdminAccess`) or an
+explicit `[AllowAnonymous]`; an architecture test fails otherwise, and the fallback policy denies
+anything that declares nothing. Then run `./scripts/generate-openapi.sh` and commit the contract.
 
-```mermaid
-flowchart LR
-  S1["1 · Spec<br/><i>/spec</i>"] --> H1{{"human<br/>approves"}}
-  H1 --> S2["2 · Plan<br/><i>/task</i>"]
-  S2 --> S3["3 · Execute<br/><i>/implement</i><br/>test first, one task"]
-  S3 --> S4["4 · Verify<br/><i>/qa · /pre-push</i>"]
-  S4 --> S5["5 · Review<br/><i>/review</i>, then a human"]
-  S5 --> PR(["Pull request → CI → merge"])
+**Add a permission.** Add the Keycloak client role, add the constant to `Permissions` and
+`Permissions.All`, give it a policy, and tell the frontend. The steps are in
+[docs/auth/setup.md](docs/auth/setup.md#4-roles-and-permissions-end-to-end).
 
-  S4 -- "gate red" --> S3
-  S5 -- "blocker" --> S3
-  S5 -- "spec was wrong" --> S1
+**Add a migration.** Use `/new-migration`; it reviews the SQL first. Rules (expand, migrate,
+contract) are in [README.be.md](README.be.md#the-zero-downtime-rule-expand--migrate--contract).
 
-  HOOKS["hooks · every edit and every shell command<br/>protect-files · block-dangerous · secret-scan<br/>auto-format · run-affected-tests · sonar-pre-push"]
-  GATES["CI · every push and pull request<br/>build with warnings as errors · format<br/>unit · integration · architecture<br/>SonarQube · Gitleaks · CodeQL · dependency audit"]
+## Troubleshooting
 
-  HOOKS -.-> S3
-  HOOKS -.-> S4
-  GATES -.-> PR
+| Symptom | Likely cause and fix |
+|---|---|
+| Every protected endpoint is `401` | No Keycloak configured, or the token's `azp` differs from `Keycloak__ClientId`, or `ValidIssuer` is not the token's exact `iss`. See [docs/auth/troubleshooting.md](docs/auth/troubleshooting.md). |
+| API refuses to start: "`Keycloak:JwksUri` is not an https URL" | Outside Development a plaintext JWKS is refused. Use https, or set `Keycloak__AllowInsecureJwksTransport=true` with a dated, written reason. |
+| `db` unhealthy or never ready | A stale `app-db-data` volume with another `sa` password. `docker compose down -v`, then start again. |
+| `dotnet ef` writes to the wrong database | The design-time factory reads `APP_DB_CONNECTION`, not `ConnectionStrings__Default`. |
+| "network app-net declared as external, but could not be found" | `docker network create app-net` (once per host). |
 
-  classDef det fill:#f2f2f2,stroke:#888,color:#333
-  class HOOKS,GATES det
-```
+## Making it yours
 
-The distinction matters more than the stages do. The standards, commands, and agents in `.claude/`
-are **prose** — an agent reads them, usually follows them, and occasionally does not. The hooks,
-the permission policy, the architecture tests, and CI are **deterministic**: they fire every time,
-identically, and a `PreToolUse` hook can refuse a tool call before it happens. That is why a rule
-worth enforcing lives in a hook rather than only in a document.
-
-The full picture — every stage, every hook, which agent does what, and one small feature followed
-through all five stages with real commands — is in **[docs/workflow.md](docs/workflow.md)**.
+1. Rename `AjBoilerplate` everywhere: the six project folders under `src/` (including
+   `AjBoilerplate.Auth`), the four under `tests/`, `AjBoilerplate.slnx`, namespaces, the `.csproj`
+   names and the `sonar.projectKey`.
+2. Delete the sample `Item` slice (see [CLAUDE.md](CLAUDE.md)); keep the architecture tests.
+3. Pick the auth provider and the cloud (`AUTH_PROVIDER`, `CLOUD_PROVIDER`), and replace the seats and
+   permissions with your own.
+4. Replace this README, continue the ADR series at `0013`, and delete the `infra/` tree you do not use.
 
 ## Related repositories
 
-The same boilerplate is published in three shapes. Pick the one that matches your project — the
-single-stack repos are derived from the full-stack one, not forks that drift. See
-[ADR-0006](docs/adr/0006-three-repository-split.md).
-
 | Repository | Contents |
 |---|---|
-| [`aj-boilerplate-fs`](https://github.com/Emadkhanqai/aj-boilerplate-fs) | The source of truth — backend + frontend + infra |
-| [`aj-boilerplate-be`](https://github.com/Emadkhanqai/aj-boilerplate-be) | This repo — backend only, promoted to the repo root |
-| [`aj-boilerplate-fe`](https://github.com/Emadkhanqai/aj-boilerplate-fe) | Frontend only, promoted to the repo root |
-
-All three share `.claude/`, the stack-neutral pages of `docs/`, `.gitignore`, and
-`.editorconfig`.
+| [`aj-boilerplate-fs`](https://github.com/Emadkhanqai/aj-boilerplate-fs) | Source of truth: backend, frontend and infra, with the one-command local stack |
+| [`aj-boilerplate-be`](https://github.com/Emadkhanqai/aj-boilerplate-be) | This repository |
+| [`aj-boilerplate-fe`](https://github.com/Emadkhanqai/aj-boilerplate-fe) | The Angular app and the nginx gateway |
 
 ## CI configuration
 
-The workflows in `.github/workflows/` need the following repository settings. They are **not**
-included and CI will not pass until you provide them. Cloud authentication uses GitHub OIDC —
-there are no long-lived cloud credentials in any workflow, and none should ever be added.
+The workflows in `.github/workflows/` need repository settings that are **not** included.
+Cloud authentication uses GitHub OIDC: there are no long-lived cloud credentials in any workflow,
+and none should be added.
 
-**Repository variables** (*Settings → Secrets and variables → Actions → Variables*)
+**Repository variables:** `CLOUD_PROVIDER` (`gcp` | `azure`), `SONAR_HOST_URL` and
+`SONAR_PROJECT_KEY` (the quality-gate job skips itself while the first is unset), `API_IMAGE`,
+`NAME_PREFIX`, `GCP_PROJECT_ID`, `GCP_REGION`, `TF_STATE_BUCKET`, `AZURE_LOCATION`,
+`AZURE_NAME_PREFIX`, `AZURE_SQL_ADMIN_OBJECT_ID`, `AZURE_SQL_ADMIN_LOGIN`,
+`CLOUDSQL_INSTANCE_CONNECTION_NAME`, `DB_NAME`, `DB_USER`, `DB_PASSWORD_SECRET`,
+`AZURE_SQL_SERVER`, `AZURE_SQL_DATABASE`, `AZURE_RESOURCE_GROUP`.
 
-| Variable | Used by | Purpose |
-|---|---|---|
-| `CLOUD_PROVIDER` | deploy | `gcp` or `azure` — selects which IaC runs |
-| `SONAR_HOST_URL` | backend CI | Your SonarQube server URL. **The quality-gate job skips itself while this is unset** — see the comment in `backend-ci.yml` and remove the guard once you have a server. |
-| `SONAR_PROJECT_KEY` | backend CI | The project key on that server |
-| `API_IMAGE` | deploy | Container image for the API, tag or digest |
-| `NAME_PREFIX` | deploy (gcp) | Short resource-name prefix, 12 characters or fewer |
-| `GCP_PROJECT_ID` · `GCP_REGION` | deploy (gcp) | Target project and region |
-| `TF_STATE_BUCKET` | deploy (gcp) | Existing GCS bucket holding Terraform state |
-| `AZURE_LOCATION` · `AZURE_NAME_PREFIX` | deploy (azure) | Target region and resource-name prefix |
-| `AZURE_SQL_ADMIN_OBJECT_ID` · `AZURE_SQL_ADMIN_LOGIN` | deploy (azure) | Entra principal (use a group) that administers Azure SQL |
+**Repository secrets:** `SONAR_TOKEN`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`,
+`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, and optionally `GITLEAKS_LICENSE`.
 
-**Repository secrets**
-
-| Secret | Used by | Purpose |
-|---|---|---|
-| `SONAR_TOKEN` | backend CI | SonarQube analysis token |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | deploy (gcp) | Full workload identity provider resource name |
-| `GCP_SERVICE_ACCOUNT` | deploy (gcp) | Service account CI impersonates |
-| `AZURE_CLIENT_ID` · `AZURE_TENANT_ID` · `AZURE_SUBSCRIPTION_ID` | deploy (azure) | Federated identity credential for OIDC |
-| `GITLEAKS_LICENSE` | backend CI | Optional. Only needed for organisation-owned **private** repositories; Gitleaks is free on public ones. |
-
-The SonarQube side targets **Community Build**, the free self-hosted edition: one project, one
-branch, no pull-request decoration. The quality-gate job is deliberately guarded to `push` on
-`main` for that reason — see [`.claude/standards/sonarqube.md`](.claude/standards/sonarqube.md).
-
-Both cloud paths bootstrap themselves: the identity CI uses is created by the same IaC, so the
-first deployment is run locally and the resulting values become the secrets above. Both
-`infra/*/README.md` files walk through it.
-
-**Environments** — create `dev`, `staging`, and `prod` under *Settings → Environments*. Add
-required reviewers to `staging` and `prod`. Those protection rules **are** the approval gates in
-`deploy.yml`; without them it promotes straight to production unreviewed.
+**Environments:** create `dev`, `staging` and `prod`; add required reviewers to `staging` and
+`prod`. Those protection rules are the approval gates in `deploy.yml`. Migrations run before every
+rollout from a bundle built by `backend-ci.yml`. The `deploy` workflows roll out **only the API
+image**.
 
 ## Contributing
 
-Read [docs/workflow.md](docs/workflow.md) and [docs/definition-of-done.md](docs/definition-of-done.md)
-before opening a pull request, and [docs/architecture.md](docs/architecture.md) before your first
-change. In short: spec first, failing test first, keep the diff small, green gate, and a human
-reviews every change — including the ones an agent wrote.
+Read [CONTRIBUTING.md](CONTRIBUTING.md), then [docs/workflow.md](docs/workflow.md) and
+[docs/definition-of-done.md](docs/definition-of-done.md). Spec first, failing test first, small
+diffs, a green gate, and a human reviews every change, including the ones an agent wrote. Commits
+follow Conventional Commits, enforced by `.claude/hooks/commit-msg.sh`.
 
 ## Licence
 
-See [`LICENSE`](LICENSE). It is an **all-rights-reserved notice**, not a grant: it records the
-status quo (a repository with no licence file is already all rights reserved) so that the position
-is explicit rather than merely implied. Two things still need a human:
-
-- the copyright holder placeholder on line 3 must be replaced with the organisation that owns
-  this work, and
-- if the intention is for others to reuse this, an actual open-source licence has to be chosen
-  deliberately. Nothing here does that for you.
+All rights reserved; the licence choice is pending. See [`LICENSE`](LICENSE).

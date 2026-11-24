@@ -4,7 +4,7 @@
 
 ## Project layout
 
-Solution `AjBoilerplate.slnx` at the repository root, with:
+Solution `./AjBoilerplate.slnx` with:
 
 - `src/AjBoilerplate.Domain`
 - `src/AjBoilerplate.Application`

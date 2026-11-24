@@ -17,7 +17,9 @@ you never push.
    fields, verify the response is a **different DTO that cannot structurally carry the field**.
    Returning it and hiding it in the UI is a finding, not a style preference. Verify a test
    asserts the field is absent from the serialized payload.
-3. **AuthN / AuthZ model** — SSO only, no local credentials; Keycloak owns roles and scopes;
+3. **AuthN / AuthZ model** — SSO only, no local credentials, **no token in the browser** (cookie
+   only; see the invariants in `docs/auth/gateway-contract.md`: a fault never signs anyone out, only a
+   401 becomes a login redirect, nothing credential-shaped is logged); Keycloak owns roles and scopes;
    any external surface uses a scoped, time-bound, revocable token whose **hash** is stored,
    never the token itself. An expired or revoked token grants nothing and the attempt is
    logged.
@@ -31,8 +33,8 @@ you never push.
    leak no internal detail.
 7. **Injection & deserialization** — no string-built SQL, no polymorphic deserialization of
    untrusted input, no shell interpolation of user data.
-8. **Supply chain** — no unvetted or unpinned dependency; `dotnet list package --vulnerable
-   --include-transitive` clean of high severity.
+8. **Supply chain** — no unvetted or unpinned dependency; `dotnet list package --vulnerable`
+   and `npm audit` clean of high severity.
 9. **SonarQube security hotspots and vulnerabilities** — Blocker/Critical/Major block the push.
 
 Work from [`../standards/owasp-security.md`](../standards/owasp-security.md),

@@ -20,11 +20,14 @@ to run against a spec that has not been approved — say so and point at [`/spec
 
 Emit tasks in this dependency order — it is the order that keeps the tree green at every step:
 
-1. **Contracts & DTOs** — the shapes consumers will agree on, plus the `code` values.
-2. **Domain** — entities, value objects, invariants, and their unit tests.
-3. **Migrations** — schema, indexes, concurrency tokens, generated *from* the model.
+1. **Contracts & DTOs** — the shapes both sides will agree on, plus the `code` values.
+2. **Migrations** — schema, indexes, concurrency tokens.
+3. **Domain** — entities, value objects, invariants, and their unit tests.
 4. **Application** — handlers, validators, ports, and their tests.
 5. **API** — controllers, policies, OpenAPI annotations, integration tests.
+6. **Frontend data-access** — regenerate types (`/sync`), then the typed service.
+7. **UI** — components, states, forms, accessibility.
+8. **E2E** — the Playwright journeys that prove the whole path.
 
 Anything that cannot be placed in that order is a signal the spec is incomplete — say so
 rather than inventing a position for it.
@@ -35,8 +38,8 @@ rather than inventing a position for it.
 - **Scope** — the files and layers it touches.
 - **Depends on** — the task numbers that must land first.
 - **Acceptance criteria** — testable statements lifted from the spec.
-- **Verification command** — the exact command that proves it (`dotnet build -warnaserror`,
-  `dotnet test tests/AjBoilerplate.UnitTests --filter …`).
+- **Verification command** — the exact command that proves it (`dotnet test --filter …`,
+  `npx nx test feature-items`).
 - **Estimated size** — must be ≤ half a day.
 
 ## Output

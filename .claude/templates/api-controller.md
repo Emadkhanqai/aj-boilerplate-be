@@ -101,7 +101,7 @@ public sealed class ItemsController : ControllerBase
   every endpoint answers identically
   ([`../standards/error-handling.md`](../standards/error-handling.md)).
 - **Document every status the action can return**, including the error shapes and their `code`
-  values, so a generated client knows what to expect.
+  values, so the generated client and the frontend both know what to expect.
 - `CancellationToken` on every action; `201` carries a `Location` header; list endpoints are
   always paginated with a server-side cap.
 
